@@ -42,6 +42,7 @@ sub flushCache { $cache->cleanup(); }
 use constant URL_AOD => 'https://virginradio.co.uk/radio/listen-again/';
 use constant URL_CDN => 'https://cdn2.talksport.com/tscdn/virginradio/audio/listenagain/';
 use constant URL_IMAGES => 'https://cdn2.talksport.com/tscdn/virginradio/schedulepage-images/';
+use constant URL_LIVESTREAM => 'http://radio.virginradio.co.uk/stream';
 use constant CHUNK_SIZE => 1800;
 
 
@@ -57,8 +58,9 @@ sub new {
 	my $song      = $args->{song};
 
 	my $streamUrl = $song->streamUrl() || return;
+	my $masterUrl = $song->track()->url;
 
-	$log->info( 'Remote streaming Virgin Radio : ' . $streamUrl . ' actual url ' . $song->track()->url);
+	$log->info( 'Remote streaming Virgin Radio : ' . $streamUrl . ' actual url ' . $masterUrl);
 
 
 	my $sock = $class->SUPER::new(
@@ -75,28 +77,27 @@ sub new {
 	${*$sock}{'client'} = $args->{'client'};
 	${*$sock}{'vars'} = {'metaDataCheck' => time(),};
 
+	if (_isAOD($masterUrl)) {
+		my $streamDetails = $song->pluginData('streamDetails');
 
-	my $streamDetails = $song->pluginData('streamDetails');
+		$song->track->secs( $streamDetails->{durationSecs} );
 
-	$song->track->secs( $streamDetails->{durationSecs} );	
+		Slim::Music::Info::setDuration( $song->track(),  $streamDetails->{durationSecs} );
+		my $meta = {
+			title =>  $streamDetails->{title} . ' - ' .  $streamDetails->{subtitle},
+			duration => 	 $streamDetails->{durationSecs},
+			cover => $streamDetails->{image},
+			icon => $streamDetails->{image},
+			type        => 'MP3 (Virgin Radio)',
+		};
 
-	Slim::Music::Info::setDuration( $song->track(),  $streamDetails->{durationSecs} );
-	my $meta = {		
-		title =>  $streamDetails->{title} . ' - ' .  $streamDetails->{subtitle},
-		duration => 	 $streamDetails->{durationSecs},
-		cover => $streamDetails->{image},
-		icon => $streamDetails->{image},
-		type        => 'MP3 (Virgin Radio)',
-	};
+		$log->debug('meta : ' . Dumper($meta));
 
-	$log->debug('meta : ' . Dumper($meta));
+		$song->pluginData( meta  => $meta );
 
-
-
-	$song->pluginData( meta  => $meta );
-
-	$song->master->currentPlaylistUpdateTime(Time::HiRes::time() );
-	Slim::Control::Request::notifyFromArray( $song->master,['newmetadata'] );
+		$song->master->currentPlaylistUpdateTime(Time::HiRes::time() );
+		Slim::Control::Request::notifyFromArray( $song->master,['newmetadata'] );
+	}
 
 
 	return $sock;
@@ -137,7 +138,14 @@ sub getNextTrack {
 	my $masterUrl = $song->track()->url;
 	main::INFOLOG && $log->is_info && $log->info("Request for next track " . $masterUrl);
 
+	#Live is straightforward
+	if (_isLive($masterUrl)) {
+		$song->streamUrl(URL_LIVESTREAM);
+		$successCb->();
+		return;
+	}
 
+	#AOD
 	my $nextIndex = $song->pluginData('nextPlaylistIndex');
 
 
@@ -149,7 +157,7 @@ sub getNextTrack {
 			main::INFOLOG && $log->is_info && $log->info("the end");
 			return;
 		}
-		
+
 		my $playlist = $details->{playlist};
 
 		my $sources = @$playlist[$nextIndex]->{sources};
@@ -159,7 +167,7 @@ sub getNextTrack {
 
 		$nextIndex++;
 		$song->pluginData( nextPlaylistIndex   => $nextIndex );
-		
+
 
 		$successCb->();
 	}else {
@@ -223,7 +231,7 @@ sub _getStreamDetails {
 				title => $title,
 				subtitle => $subTitle,
 				playlistSize => $playlistsize,
-				durationSecs => $duration,				
+				durationSecs => $duration,
 				playlist => $jsonPlaylist,
 				image => $image,
 
@@ -237,9 +245,9 @@ sub _getStreamDetails {
 
 			my $sources = @$jsonPlaylist[0]->{sources};
 			my $stream = @$sources[0]->{src};
-			$song->duration( $duration );
+			$song->duration($duration);
 			$song->streamUrl($stream);
-	
+
 			$successCb->();
 
 		},
@@ -257,48 +265,21 @@ sub _getStreamDetails {
 sub isRepeatingStream {
 	my ( undef, $song ) = @_;
 
-	return 1;
+	my $masterUrl = $song->track()->url;
+
+	if (_isAOD($masterUrl)) {
+		return 1;
+	}else {
+		return 0;
+	}
 }
+
 
 sub parseDirectHeaders {
 	my $class   = shift;
 	my $client  = shift || return;
 	my $url     = shift;
 	my @headers = @_;
-	
-	my $bitrate     = $client->streamingSong->bitrate || 128_000;
-	my $contentType = 'mp3';
-	
-	# Clear previous duration, since we're using the same URL for all tracks
-	Slim::Music::Info::setDuration( $url, 0 );
-	
-	# Grab content-length for progress bar
-	my $length;
-	my $rangelength;
-	
-	foreach my $header (@headers) {
-		if ( $header =~ /^Content-Length:\s*(.*)/i ) {
-			$length = $1;
-		}
-		elsif ( $header =~ m{^Content-Range: .+/(.*)}i ) {
-			$rangelength = $1;
-			last;
-		}
-	}
-	
-	if ( $rangelength ) {
-		$length = $rangelength;
-	}
-
-	my $details = $client->streamingSong->pluginData('streamDetails');
-
-	$length = $length * $details->{playlistSize};
-
-
-	main::INFOLOG && $log->info( 'Direct Headers read '  . $details->{durationSecs} );
-	
-	$client->streamingSong->bitrate($bitrate);
-	$client->streamingSong->duration( $details->{durationSecs});
 
 	my $song = ${*$class}{'song'} if blessed $class;
 
@@ -306,14 +287,60 @@ sub parseDirectHeaders {
 		$song = $client->controller()->songStreamController()->song();
 	}
 
-	my $startOffset = $song->pluginData('nextTrackOffset');
-	if ($startOffset) {
-		$song->startOffset($startOffset);
-		main::INFOLOG && $log->info( "Offsetting $startOffset" );
-	}
+	my $details = $song->pluginData('streamDetails');
+
 	
-	# title, bitrate, metaint, redir, type, length, body
-	return (undef, $bitrate, 0, undef, $contentType, $length, undef);
+	
+
+	if (defined $details) {			
+		
+		my $bitrate     = $client->streamingSong->bitrate || 128_000;
+		my $contentType = 'mp3';
+
+		# Clear previous duration, since we're using the same URL for all tracks
+		Slim::Music::Info::setDuration( $url, 0 );
+
+		# Grab content-length for progress bar
+		my $length;
+		my $rangelength;
+
+		foreach my $header (@headers) {
+			if ( $header =~ /^Content-Length:\s*(.*)/i ) {
+				$length = $1;
+			}elsif ( $header =~ m{^Content-Range: .+/(.*)}i ) {
+				$rangelength = $1;
+				last;
+			}
+		}
+
+		if ($rangelength) {
+			$length = $rangelength;
+		}
+
+	
+
+		$length = $length * $details->{playlistSize};
+
+
+		main::INFOLOG && $log->info( 'Direct Headers read '  . $details->{durationSecs} );
+
+		$client->streamingSong->bitrate($bitrate);
+		$client->streamingSong->duration( $details->{durationSecs});
+		
+		my $startOffset = $song->pluginData('nextTrackOffset');
+		if ($startOffset) {
+			$song->startOffset($startOffset);
+			main::INFOLOG && $log->info("Offsetting $startOffset");
+		}
+
+		# title, bitrate, metaint, redir, type, length, body
+		return (undef, $bitrate, 0, undef, $contentType, $length, undef);
+	}
+	else {		
+		#Must be live stream
+		main::INFOLOG && $log->info("Live Parse Headers");
+		return $class->SUPER::parseDirectHeaders($client, $url, @headers);
+	}
 }
 
 
@@ -331,10 +358,10 @@ sub getSeekData {
 
 	my $sources = @$playlist[$newIndex]->{sources};
 	my $stream = @$sources[0]->{src};
-	
+
 	$song->streamUrl($stream);
 
-	my $offset = ( ($song->bitrate || 128_000) / 8 ) * (CHUNK_SIZE * $newIndex) ;
+	my $offset = ( ($song->bitrate || 128_000) / 8 ) * (CHUNK_SIZE * $newIndex);
 
 	main::INFOLOG && $log->info( 'Stream is ' . $stream . ' index ' . $newIndex . ' offset ' . $offset);
 
@@ -342,31 +369,45 @@ sub getSeekData {
 	$song->pluginData( nextPlaylistIndex   => $newIndex );
 	$song->pluginData( nextTrackOffset   => 0 );
 
-	
+
 	return {
 		sourceStreamOffset => (( ($song->bitrate || 128_000) / 8 ) * $newtime) - $offset,
 		timeOffset         => $newtime,
 	};
 }
 
-sub canSeek { 1 }
+
+sub canSeek {
+	my ( $class, $client, $song ) = @_;
+
+
+	my $masterUrl = $song->track()->url;
+
+	if (_isAOD($masterUrl)) {
+		return 1;
+	}else {
+		return 0;
+	}
+}
 
 
 sub scanUrl {
 	my ($class, $url, $args) = @_;
 
 	main::DEBUGLOG && $log->is_debug && $log->debug("scanurl $url");
-	$args->{'cb'}->($args->{'song'}->currentTrack());
 
-	# my $newurl = getAODUrl($url);
-	# main::DEBUGLOG && $log->is_debug && $log->debug("scanurl AOD $newurl");
-
-	# #let LMS sort out the real stream for seeking etc.
-	# my $realcb = $args->{cb};
-	# $args->{cb} = sub {
-	# 	$realcb->($args->{song}->currentTrack());
-	# };
-	# Slim::Utils::Scanner::Remote->scanURL($newurl, $args);
+#	if (_isAOD($url)) {
+		$args->{'cb'}->($args->{'song'}->currentTrack());
+#	}
+#	else
+#	{
+#		#let LMS sort out the real stream for seeking etc.
+#		my $realcb = $args->{cb};
+#		$args->{cb} = sub {
+#			$realcb->($args->{song}->currentTrack());
+#		};
+#		Slim::Utils::Scanner::Remote->scanURL(URL_LIVESTREAM, $args);
+#	}
 
 }
 
@@ -392,6 +433,28 @@ sub _AODUrlEpoch {
 	my $epoch = int(@urlsplit[2]);
 
 	return $epoch;
+}
+
+
+sub _isLive {
+	my ($url) = @_;
+
+	my @urlsplit = split /_/x, $url;
+	if (@urlsplit[1] eq 'LIVE') {
+		return 1;
+	}
+	return;
+}
+
+
+sub _isAOD {
+	my ($url) = @_;
+
+	my @urlsplit = split /_/x, $url;
+	if (@urlsplit[1] eq 'AOD') {
+		return 1;
+	}
+	return;
 }
 
 1;

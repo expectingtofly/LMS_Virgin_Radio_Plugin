@@ -52,7 +52,7 @@ sub toplevel {
 		{
 			name        => 'Virgin Radio LIVE',
 			type        => 'audio',
-			url         => 'https://radio.radioplayer.co.uk/stream',
+			url         => 'virgin://_LIVE',
 			on_select   => 'play'
 		},
 		{
