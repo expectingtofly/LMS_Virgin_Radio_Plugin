@@ -35,6 +35,7 @@ use Digest::MD5 qw(md5_hex);
 
 use Plugins::VirginRadio::Utilities;
 
+
 my $log = logger('plugin.virginradio');
 my $prefs = preferences('plugin.virginradio');
 
@@ -201,7 +202,7 @@ sub _parseSchedule {
 
 	for my $i2 (0..$bound) {
 		my @epoch = split /\//, @$AOD[$i2]->attr('href');
-		@$menu[$i2]->{url} = 'virginradio://_AOD_' . pop @epoch;
+		@$menu[$i2]->{url} = 'virgin://_AOD_' . pop @epoch;
 	}
 	$log->info('reference');
 
