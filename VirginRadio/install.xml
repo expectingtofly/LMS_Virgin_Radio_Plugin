@@ -3,7 +3,7 @@
 <extension>
 	<name>PLUGIN_VIRGINRADIO</name>
 	<module>Plugins::VirginRadio::Plugin</module>
-	<version>0.0.65</version>
+	<version>0.0.98</version>
 	<description>PLUGIN_VIRGINRADIO_DESC</description>
 	<creator>ExpectingToFly</creator>
 	<email>stu@expectingtofly.co.uk</email>

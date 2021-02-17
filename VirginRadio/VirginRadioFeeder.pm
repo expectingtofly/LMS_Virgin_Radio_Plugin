@@ -52,7 +52,7 @@ sub toplevel {
 		{
 			name        => 'Virgin Radio LIVE',
 			type        => 'audio',
-			url         => 'virgin://_LIVE',
+			url         => 'virgin://_LIVE_vir',
 			on_select   => 'play'
 		},
 		{

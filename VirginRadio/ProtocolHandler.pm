@@ -42,7 +42,8 @@ sub flushCache { $cache->cleanup(); }
 use constant URL_AOD => 'https://virginradio.co.uk/radio/listen-again/';
 use constant URL_CDN => 'https://cdn2.talksport.com/tscdn/virginradio/audio/listenagain/';
 use constant URL_IMAGES => 'https://cdn2.talksport.com/tscdn/virginradio/schedulepage-images/';
-use constant URL_LIVESTREAM => 'http://radio.virginradio.co.uk/stream';
+use constant URL_LIVESTREAM => 'https://radio.virginradio.co.uk/stream';
+use constant URL_ONAIR => 'https://virginradio.co.uk/sites/default/files/on_air_now_json_virgin.js';
 use constant CHUNK_SIZE => 1800;
 
 
@@ -57,13 +58,14 @@ sub new {
 
 	my $song      = $args->{song};
 
-	my $streamUrl = $song->streamUrl() || return;
 	my $masterUrl = $song->track()->url;
+
+	my $streamUrl = $song->streamUrl() || return;
 
 	$log->info( 'Remote streaming Virgin Radio : ' . $streamUrl . ' actual url ' . $masterUrl);
 
 
-	my $sock = $class->SUPER::new(
+	my $self = $class->SUPER::new(
 		{
 			url     => $streamUrl,
 			song    => $song,
@@ -72,10 +74,10 @@ sub new {
 		}
 	) || return;
 
-	${*$sock}{contentType} = 'audio/mpeg';
-	${*$sock}{'song'}   = $args->{'song'};
-	${*$sock}{'client'} = $args->{'client'};
-	${*$sock}{'vars'} = {'metaDataCheck' => time(),};
+	${*$self}{contentType} = 'audio/mpeg';
+	${*$self}{'song'}   = $args->{'song'};
+	${*$self}{'client'} = $args->{'client'};
+	${*$self}{'vars'} = {'isLive' => _isLive($masterUrl),};
 
 	if (_isAOD($masterUrl)) {
 		my $streamDetails = $song->pluginData('streamDetails');
@@ -97,10 +99,35 @@ sub new {
 
 		$song->master->currentPlaylistUpdateTime(Time::HiRes::time() );
 		Slim::Control::Request::notifyFromArray( $song->master,['newmetadata'] );
+	} else {
+		if (_isLive($masterUrl)) {
+			$self->liveMetaData();
+		}
 	}
 
 
-	return $sock;
+	return $self;
+}
+
+
+sub close {
+	my $self = shift;
+	my $v = $self->vars;
+	if ($v->{isLive}) {
+		main::INFOLOG && $log->is_info && $log->info("killing meta data timer");
+		Slim::Utils::Timers::killTimers($self, \&liveMetaData);
+	}
+
+	main::INFOLOG && $log->is_info && $log->info("end of streaming for ", ${*$self}{'song'}->track->url);
+
+	$self->SUPER::close(@_);
+
+
+}
+
+
+sub vars {
+	return ${ *{ $_[0] } }{'vars'};
 }
 
 
@@ -130,7 +157,9 @@ sub getMetadataFor {
 }
 
 
-sub getFormatForURL () { 'mp3' }
+sub getFormatForURL { 'mp3' }
+
+sub isRemote { 1 }
 
 
 sub getNextTrack {
@@ -140,42 +169,45 @@ sub getNextTrack {
 
 	#Live is straightforward
 	if (_isLive($masterUrl)) {
-		$song->streamUrl(URL_LIVESTREAM);
+
+		main::INFOLOG && $log->is_info && $log->info("Setting Live Stream " . URL_LIVESTREAM);
+
+		$song->streamUrl(Plugins::VirginRadio::ProtocolHandler::URL_LIVESTREAM);
+
 		$successCb->();
-		return;
 	}
+	if (_isAOD($masterUrl)) {
 
-	#AOD
-	my $nextIndex = $song->pluginData('nextPlaylistIndex');
+		#AOD
+		my $nextIndex = $song->pluginData('nextPlaylistIndex');
 
 
-	if (defined $nextIndex) {
-		my $details = $song->pluginData('streamDetails');
+		if (defined $nextIndex) {
+			my $details = $song->pluginData('streamDetails');
 
-		#we may be at the end
-		if ($nextIndex >= $details->{playlistSize}) {
-			main::INFOLOG && $log->is_info && $log->info("the end");
-			return;
+			#we may be at the end
+			if ($nextIndex >= $details->{playlistSize}) {
+				main::INFOLOG && $log->is_info && $log->info("the end");
+				return;
+			}
+
+			my $playlist = $details->{playlist};
+
+			my $sources = @$playlist[$nextIndex]->{sources};
+			my $stream = @$sources[0]->{src};
+			$song->streamUrl($stream);
+			$song->pluginData( nextTrackOffset   => ($nextIndex * CHUNK_SIZE) );
+
+			$nextIndex++;
+			$song->pluginData( nextPlaylistIndex   => $nextIndex );
+
+
+			$successCb->();
+		}else {
+			my $epoch = _AODUrlEpoch($masterUrl);
+			_getStreamDetails($epoch, $song, $successCb);
 		}
-
-		my $playlist = $details->{playlist};
-
-		my $sources = @$playlist[$nextIndex]->{sources};
-		my $stream = @$sources[0]->{src};
-		$song->streamUrl($stream);
-		$song->pluginData( nextTrackOffset   => ($nextIndex * CHUNK_SIZE) );
-
-		$nextIndex++;
-		$song->pluginData( nextPlaylistIndex   => $nextIndex );
-
-
-		$successCb->();
-	}else {
-		my $epoch = _AODUrlEpoch($masterUrl);
-		_getStreamDetails($epoch, $song, $successCb);
 	}
-
-	return;
 }
 
 
@@ -267,6 +299,8 @@ sub isRepeatingStream {
 
 	my $masterUrl = $song->track()->url;
 
+	$log->debug('In repeating ' . $masterUrl);
+
 	if (_isAOD($masterUrl)) {
 		return 1;
 	}else {
@@ -289,11 +323,9 @@ sub parseDirectHeaders {
 
 	my $details = $song->pluginData('streamDetails');
 
-	
-	
 
-	if (defined $details) {			
-		
+	if (defined $details) {
+
 		my $bitrate     = $client->streamingSong->bitrate || 128_000;
 		my $contentType = 'mp3';
 
@@ -317,7 +349,6 @@ sub parseDirectHeaders {
 			$length = $rangelength;
 		}
 
-	
 
 		$length = $length * $details->{playlistSize};
 
@@ -326,7 +357,7 @@ sub parseDirectHeaders {
 
 		$client->streamingSong->bitrate($bitrate);
 		$client->streamingSong->duration( $details->{durationSecs});
-		
+
 		my $startOffset = $song->pluginData('nextTrackOffset');
 		if ($startOffset) {
 			$song->startOffset($startOffset);
@@ -335,8 +366,8 @@ sub parseDirectHeaders {
 
 		# title, bitrate, metaint, redir, type, length, body
 		return (undef, $bitrate, 0, undef, $contentType, $length, undef);
-	}
-	else {		
+	}else {
+
 		#Must be live stream
 		main::INFOLOG && $log->info("Live Parse Headers");
 		return $class->SUPER::parseDirectHeaders($client, $url, @headers);
@@ -383,6 +414,8 @@ sub canSeek {
 
 	my $masterUrl = $song->track()->url;
 
+	$log->debug('Can Seek ' . $masterUrl);
+
 	if (_isAOD($masterUrl)) {
 		return 1;
 	}else {
@@ -391,24 +424,81 @@ sub canSeek {
 }
 
 
+sub liveMetaData {
+	my $self = shift;
+
+	my $v = $self->vars;
+
+	$log->debug('In readMetaData ');
+	Slim::Networking::SimpleAsyncHTTP->new(
+		sub {
+			my $http = shift;
+			my $content = ${$http->contentRef};
+
+			$log->info('Getting MetaData');
+
+			$log->debug('Response ' . $content);
+
+			#decode the json
+			$content =~ s/^jsonCallback\(//;
+			$content =~ s/\);$//;
+			my $jsonOnAir = decode_json $content;
+
+			my $title =  $jsonOnAir->{vir}->{show};
+
+			my $image = $title;
+			$image =~ s/ /-/ig;
+			$image = lc $image;
+			$image = Plugins::VirginRadio::ProtocolHandler::URL_IMAGES . $image . '.jpg';
+
+
+			my $meta = {
+				title =>  $title,
+				realTitle => $title,
+				artist => 'Virgin Radio',
+				cover => $image,
+				realCover => $image,
+				icon => $image,
+				realIcon =>$image,
+				type        => 'MP3 (Virgin Radio)',
+			};
+
+			$log->debug('Meta Data ' . Dumper($meta));
+
+			my $checkagain =  $jsonOnAir->{'vir'}->{'start-time'} + $jsonOnAir->{'vir'}->{'duration'} + 10;
+
+			if ($checkagain < (time()+30)){
+				$checkagain = time() + 120;
+			}
+
+			my $client = ${*$self}{'client'};
+			my $song = $client->playingSong();
+			$song->pluginData( meta  => $meta );
+			Slim::Control::Request::notifyFromArray( $song->master,['newmetadata'] );
+
+			$log->debug('Callback now  ' . time() . ' when ' . $checkagain);
+
+			Slim::Utils::Timers::setTimer($self, $checkagain, \&liveMetaData);
+
+		},
+		sub {
+			#Couldn't get meta data
+			$log->error('Failed to retrieve on air text');
+
+			#try again in 2 minutes
+			Slim::Utils::Timers::setTimer($self, (time() + 120), \&liveMetaData);
+		}
+	)->get(Plugins::VirginRadio::ProtocolHandler::URL_ONAIR);
+
+}
+
+
 sub scanUrl {
 	my ($class, $url, $args) = @_;
 
 	main::DEBUGLOG && $log->is_debug && $log->debug("scanurl $url");
 
-#	if (_isAOD($url)) {
-		$args->{'cb'}->($args->{'song'}->currentTrack());
-#	}
-#	else
-#	{
-#		#let LMS sort out the real stream for seeking etc.
-#		my $realcb = $args->{cb};
-#		$args->{cb} = sub {
-#			$realcb->($args->{song}->currentTrack());
-#		};
-#		Slim::Utils::Scanner::Remote->scanURL(URL_LIVESTREAM, $args);
-#	}
-
+	$args->{'cb'}->($args->{'song'}->currentTrack());
 }
 
 
@@ -430,7 +520,7 @@ sub _AODUrlEpoch {
 
 	my @urlsplit = split /_/x, $url;
 
-	my $epoch = int(@urlsplit[2]);
+	my $epoch = int($urlsplit[2]);
 
 	return $epoch;
 }
@@ -440,7 +530,7 @@ sub _isLive {
 	my ($url) = @_;
 
 	my @urlsplit = split /_/x, $url;
-	if (@urlsplit[1] eq 'LIVE') {
+	if ($urlsplit[1] eq 'LIVE') {
 		return 1;
 	}
 	return;
@@ -451,7 +541,7 @@ sub _isAOD {
 	my ($url) = @_;
 
 	my @urlsplit = split /_/x, $url;
-	if (@urlsplit[1] eq 'AOD') {
+	if ($urlsplit[1] eq 'AOD') {
 		return 1;
 	}
 	return;
