@@ -33,7 +33,7 @@ use Plugins::VirginRadio::ProtocolHandler;
 my $log = Slim::Utils::Log->addLogCategory(
 	{
 		'category'     => 'plugin.virginradio',
-		'defaultLevel' => 'DEBUG',
+		'defaultLevel' => 'WARN',
 		'description'  => getDisplayName(),
 	}
 );
