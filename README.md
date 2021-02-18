@@ -3,7 +3,7 @@
 This plugin provides access from your LMS connected devices to the following :
 
 * All four live UK Virgin Radio stations with Station with :
-  * Station meta data for current programme including images.
+  * "On Air" station data for current programme including images.
   * "Now Playing" track information with images.
 * 7 day catch up listening for the main Virgin Radio station schedule.
 
