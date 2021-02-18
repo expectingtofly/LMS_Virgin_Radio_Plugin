@@ -1,6 +1,6 @@
 package Plugins::VirginRadio::VirginRadioFeeder;
 
-# Copyright (C) 2021 Stuart McLean
+# Copyright (C) 2021 Stuart McLean stu@expectingtofly.co.uk
 
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by

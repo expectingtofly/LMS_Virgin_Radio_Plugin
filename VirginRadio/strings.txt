@@ -2,7 +2,7 @@ PLUGIN_VIRGINRADIO
 	EN	Virgin Radio (UK)
 
 PLUGIN_VIRGINRADIO_DESC
-	EN	Virgin Radio (UK) - Live and 7 Day Catchup
+	EN	Virgin Radio (UK) - Live Stations and 7 Day Catchup
 
 PLUGIN_VIRGINRADIO_RADIOMENU
 	EN	Show in "Radio" Menu
