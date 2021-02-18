@@ -1,8 +1,8 @@
 # Virgin Media (UK) Radio Plugin for Logitech Media Server
 
-This plugin provides access from your LMS connected devices to the following :
+This LMS Plugin provides access to the following:
 
-* All four live UK Virgin Radio stations with Station with :
+* All four live Virgin Radio (UK) stations with :
   * "On Air" station data for current programme including images.
   * "Now Playing" track information with images.
 * 7 day catch up listening for the main Virgin Radio station schedule.
