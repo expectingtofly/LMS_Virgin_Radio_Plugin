@@ -459,8 +459,11 @@ sub liveTrackData{
 			main::DEBUGLOG && $log->is_debug && $log->debug('Reading Track data');
 
 			#decode the json
-			$content =~ s/^jsonCallback_virgin\(//;
+			my $suffix = $v->{'liveStation'};
+			$suffix = 'virgin' if $v->{'liveStation'} eq 'vir';
+			$content =~ s/^jsonCallback_$suffix\(//;
 			$content =~ s/\);$//;
+
 			my $jsonTrack = decode_json $content;
 
 			my $validFrom = $jsonTrack->{nowplaying}[0]->{time};

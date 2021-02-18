@@ -60,6 +60,12 @@ sub initPlugin {
 		is_app => $class->can('nonSNApps') && (!($prefs->get('is_radio'))) ? 1 : undef,
 		weight => 1,
 	);
+
+	if ( !$::noweb ) {
+		require Plugins::VirginRadio::Settings;
+		Plugins::VirginRadio::Settings->new;
+	}
+
 	
 	return;
 }

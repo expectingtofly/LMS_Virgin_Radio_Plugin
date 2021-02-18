@@ -3,7 +3,7 @@
 <extension>
 	<name>PLUGIN_VIRGINRADIO</name>
 	<module>Plugins::VirginRadio::Plugin</module>
-	<version>0.0.114</version>
+	<version>0.0.115</version>
 	<description>PLUGIN_VIRGINRADIO_DESC</description>
 	<creator>ExpectingToFly</creator>
 	<email>stu@expectingtofly.co.uk</email>
@@ -13,5 +13,6 @@
 		<id>SlimServer</id>
 		<minVersion>7.9</minVersion>
         <maxVersion>*</maxVersion>
-	</targetApplication>	
+	</targetApplication>
+	<optionsURL>plugins/VirginRadio/settings/basic.html</optionsURL>	
 </extension>
