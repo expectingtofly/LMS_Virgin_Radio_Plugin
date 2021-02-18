@@ -30,6 +30,7 @@ use POSIX;
 use HTTP::Date;
 use JSON::XS::VersionOneAndTwo;
 use Data::Dumper;
+use Time::ParseDate;
 
 Slim::Player::ProtocolHandlers->registerHandler('virgin', __PACKAGE__);
 
@@ -44,6 +45,7 @@ use constant URL_CDN => 'https://cdn2.talksport.com/tscdn/virginradio/audio/list
 use constant URL_IMAGES => 'https://cdn2.talksport.com/tscdn/virginradio/schedulepage-images/';
 use constant URL_LIVESTREAM => 'https://radio.virginradio.co.uk/stream';
 use constant URL_ONAIR => 'https://virginradio.co.uk/sites/default/files/on_air_now_json_virgin.js';
+use constant URL_RECENTLYPLAYED => 'https://virginradio.co.uk/sites/virginradio.co.uk/files/nocache/now_lastsongs_json.json';
 use constant CHUNK_SIZE => 1800;
 
 
@@ -101,7 +103,8 @@ sub new {
 		Slim::Control::Request::notifyFromArray( $song->master,['newmetadata'] );
 	} else {
 		if (_isLive($masterUrl)) {
-			$self->liveMetaData();
+			$self->liveMetaData();			
+			Slim::Utils::Timers::setTimer($self, (time() + 8), \&liveTrackData);
 		}
 	}
 
@@ -116,6 +119,7 @@ sub close {
 	if ($v->{isLive}) {
 		main::INFOLOG && $log->is_info && $log->info("killing meta data timer");
 		Slim::Utils::Timers::killTimers($self, \&liveMetaData);
+		Slim::Utils::Timers::killTimers($self, \&liveTrackData);
 	}
 
 	main::INFOLOG && $log->is_info && $log->info("end of streaming for ", ${*$self}{'song'}->track->url);
@@ -424,10 +428,113 @@ sub canSeek {
 }
 
 
+sub liveTrackData{
+	my $self = shift;
+
+	my $client = ${*$self}{'client'};
+	my $song = $client->playingSong();
+
+
+	$log->debug('In readtrack ');
+	Slim::Networking::SimpleAsyncHTTP->new(
+		sub {
+			my $http = shift;
+			my $content = ${$http->contentRef};
+
+			$log->info('Getting track Data');
+
+			$log->debug('Response ' . $content);
+
+			#decode the json
+			$content =~ s/^jsonCallback_virgin\(//;
+			$content =~ s/\);$//;
+			my $jsonTrack = decode_json $content;
+
+			$log->debug('json ' . Dumper($jsonTrack));
+
+			my $validFrom = $jsonTrack->{nowplaying}[0]->{time};
+			my $duration  = $jsonTrack->{nowplaying}[0]->{duration};
+
+			my $durSeconds = parsedate($duration, NOW => 0); 
+
+			$log->debug('actual ' . $durSeconds  .  ' could be ' . parsedate($duration) );
+
+			$durSeconds = 180 if $durSeconds >180; # Never go more than 3 minutes
+
+			my $validTime =  str2time($validFrom);
+			my $validEndTime = $validTime + $durSeconds;
+			$log->debug('now ' . time()  .  ' when ' . $validTime . ' to ' . $validEndTime);
+			
+
+			if (($validEndTime >time()) && ($validEndTime-time() > 30) ) {
+				my $artist = $jsonTrack->{nowplaying}[0]->{artist};
+				my $title = $jsonTrack->{nowplaying}[0]->{title};
+				my $image = $jsonTrack->{nowplaying}[0]->{imageUrl};
+				my $album = $jsonTrack->{nowplaying}[0]->{album};
+
+				if (my $meta = $song->pluginData('meta')) {
+					$meta->{title} = "$title  by $artist ($album)";
+					$meta->{icon} =  $image;
+					$meta->{cover} =  $image;
+
+
+					my $cb = sub {
+						$song->pluginData( meta  => $meta );
+						main::INFOLOG && $log->is_info && $log->info("Setting title after callback");
+						Slim::Control::Request::notifyFromArray( $client, ['newmetadata'] );
+					};
+
+					#the title will be set when the current buffer is done
+					Slim::Music::Info::setDelayedCallback( $client, $cb, 'output-only' );
+					Slim::Utils::Timers::setTimer($self, $validEndTime, \&liveTrackData);
+				} else {
+
+					#not there come back in 2 minutes
+					$log->warn('No Live meta data');
+					Slim::Utils::Timers::setTimer($self, (time() + 120), \&liveTrackData);
+				}
+
+			}else {
+				#set it all back
+				if (my $meta = $song->pluginData('meta')) {					
+					$meta->{title} = $meta->{realTitle};
+					$meta->{icon} =  $meta->{realIcon};
+					$meta->{cover} =  $meta->{realCover};
+
+					my $cb = sub {
+						$song->pluginData( meta  => $meta );
+						main::INFOLOG && $log->is_info && $log->info("Setting title back after callback");
+						Slim::Control::Request::notifyFromArray( $client, ['newmetadata'] );
+					};
+
+					#the title will be set when the current buffer is done
+					Slim::Music::Info::setDelayedCallback( $client, $cb, 'output-only' );
+					Slim::Utils::Timers::setTimer($self, (time() + 120), \&liveTrackData);
+				}else {
+
+					#not there come back in 2 minutes
+					$log->warn('No Live meta data');
+					Slim::Utils::Timers::setTimer($self, (time() + 120), \&liveTrackData);
+				}
+			}
+		},
+		,
+		sub {
+			#Couldn't get meta data
+			$log->error('Failed to retrieve on recently played');
+
+			#try again in 2 minutes
+			Slim::Utils::Timers::setTimer($self, (time() + 120), \&liveTrackData);
+		}
+	)->get(Plugins::VirginRadio::ProtocolHandler::URL_RECENTLYPLAYED);
+}
+
+
 sub liveMetaData {
 	my $self = shift;
 
 	my $v = $self->vars;
+
 
 	$log->debug('In readMetaData ');
 	Slim::Networking::SimpleAsyncHTTP->new(
