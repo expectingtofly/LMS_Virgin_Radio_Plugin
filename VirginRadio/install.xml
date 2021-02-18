@@ -5,8 +5,8 @@
 	<module>Plugins::VirginRadio::Plugin</module>
 	<version>1.0.0</version>
 	<description>PLUGIN_VIRGINRADIO_DESC</description>
-	<creator>ExpectingToFly</creator>
-	<email>stu@expectingtofly.co.uk</email>
+	<creator>ExpectingToFly</creator>	
+	<homepageURL>https://github.com/expectingtofly/LMS_Virgin_Radio_Plugin</homepageURL>
 	<icon>plugins/VirginRadio/html/images/VirginRadio.png</icon>
 	<defaultState>enabled</defaultState>
 	<targetApplication>
