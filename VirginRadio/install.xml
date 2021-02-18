@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+
+<extension>
+	<name>PLUGIN_VIRGINRADIO</name>
+	<module>Plugins::VirginRadio::Plugin</module>
+	<version>1.0.0</version>
+	<description>PLUGIN_VIRGINRADIO_DESC</description>
+	<creator>ExpectingToFly</creator>
+	<email>stu@expectingtofly.co.uk</email>
+	<icon>plugins/VirginRadio/html/images/VirginRadio.png</icon>
+	<defaultState>enabled</defaultState>
+	<targetApplication>
+		<id>SlimServer</id>
+		<minVersion>7.9</minVersion>
+        <maxVersion>*</maxVersion>
+	</targetApplication>
+	<optionsURL>plugins/VirginRadio/settings/basic.html</optionsURL>	
+</extension>

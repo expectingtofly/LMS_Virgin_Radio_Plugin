@@ -1,0 +1,11 @@
+PLUGIN_VIRGINRADIO
+	EN	Virgin Radio (UK)
+
+PLUGIN_VIRGINRADIO_DESC
+	EN	Virgin Radio (UK) - Live Stations and 7 Day Catchup
+
+PLUGIN_VIRGINRADIO_RADIOMENU
+	EN	Show in "Radio" Menu
+
+PLUGIN_VIRGINRADIO_RADIOMENU_DESC
+	EN	Select this if you would rather Virgin Radio is located within the "Radio" menu rather than the "My Apps" menu.  Requires LMS restart.
