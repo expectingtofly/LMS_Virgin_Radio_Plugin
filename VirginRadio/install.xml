@@ -3,7 +3,7 @@
 <extension>
 	<name>PLUGIN_VIRGINRADIO</name>
 	<module>Plugins::VirginRadio::Plugin</module>
-	<version>1.0.1</version>
+	<version>1.0.2</version>
 	<description>PLUGIN_VIRGINRADIO_DESC</description>
 	<creator>ExpectingToFly</creator>	
 	<homepageURL>https://github.com/expectingtofly/LMS_Virgin_Radio_Plugin</homepageURL>
