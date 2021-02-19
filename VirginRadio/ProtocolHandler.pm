@@ -478,7 +478,8 @@ sub liveTrackData{
 			my $validFrom = $jsonTrack->{nowplaying}[0]->{time};
 			my $duration  = $jsonTrack->{nowplaying}[0]->{duration};
 
-			my $durSeconds = parsedate($duration, NOW => 0);
+			#hard coding the seconds to 4 minutes, as converting causes problems on some os and its always 4 mins anyway!
+			my $durSeconds = 240;
 
 			my $validTime =  str2time($validFrom) + TRACK_OFFSET;
 			my $validEndTime = $validTime + $durSeconds;
