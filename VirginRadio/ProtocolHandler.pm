@@ -102,7 +102,10 @@ sub new {
 	my $isLive = _isLive($masterUrl);
 	my $liveStation = '';
 	$liveStation = _liveStation($masterUrl) if $isLive;
-	${*$self}{'vars'} = {'isLive' => _isLive($masterUrl), 'liveStation' => $liveStation};
+	${*$self}{'vars'} = {
+		'isLive' => $isLive,
+		'liveStation' => $liveStation,
+	};
 
 	if (_isAOD($masterUrl)) {
 		my $streamDetails = $song->pluginData('streamDetails');
@@ -199,9 +202,10 @@ sub getNextTrack {
 
 		my $streamUrl = Plugins::VirginRadio::ProtocolHandler::URL_LIVESTREAM->{_liveStation($masterUrl)};
 
-		main::DEBUGLOG && $log->is_debug && $log->debug("Setting Live Stream " . $streamUrl);
-
+		main::DEBUGLOG && $log->is_debug && $log->debug("Setting Live Stream $streamUrl " . 128_000);		
+		
 		$song->streamUrl($streamUrl);
+		$song->track->bitrate(128_000);
 
 		$successCb->();
 	}
@@ -223,8 +227,9 @@ sub getNextTrack {
 			my $playlist = $details->{playlist};
 
 			my $sources = @$playlist[$nextIndex]->{sources};
-			my $stream = @$sources[0]->{src};
+			my $stream = @$sources[0]->{src};			
 			$song->streamUrl($stream);
+			$song->track->bitrate(128_000);
 			$song->pluginData( nextTrackOffset   => ($nextIndex * CHUNK_SIZE) );
 
 			$nextIndex++;
@@ -381,6 +386,8 @@ sub parseDirectHeaders {
 		$client->streamingSong->bitrate($bitrate);
 		$client->streamingSong->duration( $details->{durationSecs});
 
+		main::INFOLOG && $log->info( "Setting bitrate $bitrate and duration $details->{durationSecs} in as part of direct headers");
+
 		my $startOffset = $song->pluginData('nextTrackOffset');
 		if ($startOffset) {
 			$song->startOffset($startOffset);
@@ -466,6 +473,8 @@ sub liveTrackData{
 
 			my $jsonTrack = decode_json $content;
 
+			main::DEBUGLOG && $log->is_debug && $log->debug('Raw track meta Data : ' . $content);
+
 			my $validFrom = $jsonTrack->{nowplaying}[0]->{time};
 			my $duration  = $jsonTrack->{nowplaying}[0]->{duration};
 
@@ -473,6 +482,8 @@ sub liveTrackData{
 
 			my $validTime =  str2time($validFrom) + TRACK_OFFSET;
 			my $validEndTime = $validTime + $durSeconds;
+
+			main::DEBUGLOG && $log->is_debug && $log->debug("Track Time Data - Valid From $validFrom Duration $duration Duration Seconds $durSeconds ValidTime $validTime Valid End Time $validEndTime Now " . time());
 
 
 			if ((time() > $validTime) && ($validEndTime >time()) && (($validEndTime-time()) > 30) ) {
@@ -620,7 +631,22 @@ sub scanUrl {
 
 	main::DEBUGLOG && $log->is_debug && $log->debug("scanurl $url");
 
-	$args->{'cb'}->($args->{'song'}->currentTrack());
+	my $urlToScan = '';
+
+	if (_isLive($url)) {
+		$urlToScan = Plugins::VirginRadio::ProtocolHandler::URL_LIVESTREAM->{_liveStation($url)};
+	}else {
+		$urlToScan = getAODUrl($url);
+	}
+
+	main::DEBUGLOG && $log->is_debug && $log->debug("scanurl $url actual stream $urlToScan");
+
+	#let LMS sort out the real stream
+	my $realcb = $args->{cb};
+	$args->{cb} = sub {
+		$realcb->($args->{song}->currentTrack());
+	};
+	Slim::Utils::Scanner::Remote->scanURL($urlToScan, $args);
 }
 
 
