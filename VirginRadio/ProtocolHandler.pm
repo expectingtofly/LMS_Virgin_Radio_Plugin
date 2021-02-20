@@ -155,6 +155,14 @@ sub close {
 
 }
 
+sub canDirectStream {
+	my ($classOrSelf, $client, $url, $inType) = @_;
+	
+	main::DEBUGLOG && $log->is_debug && $log->debug('Never direct stream');
+
+	return 0;
+}
+
 
 sub vars {
 	return ${ *{ $_[0] } }{'vars'};
