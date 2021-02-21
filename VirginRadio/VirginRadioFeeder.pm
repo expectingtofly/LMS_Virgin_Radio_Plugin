@@ -51,7 +51,7 @@ sub toplevel {
 	my $menu = [
 		{
 			name => 'Live Virgin Radio Stations',
-			image    => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO,
+			image    => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO_LIVE,
 			items => [
 					{
 						name        => 'Virgin Radio',
