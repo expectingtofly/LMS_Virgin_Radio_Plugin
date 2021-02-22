@@ -7,7 +7,7 @@
 	<description>PLUGIN_VIRGINRADIO_DESC</description>
 	<creator>ExpectingToFly</creator>	
 	<homepageURL>https://github.com/expectingtofly/LMS_Virgin_Radio_Plugin</homepageURL>
-	<icon>plugins/VirginRadio/html/images/VirginRadioLogo.svg.png</icon>
+	<icon>plugins/VirginRadio/html/images/VirginRadioLogo_svg.png</icon>
 	<defaultState>enabled</defaultState>
 	<targetApplication>
 		<id>SlimServer</id>
