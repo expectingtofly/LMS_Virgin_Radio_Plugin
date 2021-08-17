@@ -54,7 +54,7 @@ sub toplevel {
 			image    => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO_LIVE,
 			items => [
 					{
-						name        => 'Virgin Radio',
+						name        => 'Virgin Radio UK',
 						type        => 'audio',
 						cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO,
 						image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO,

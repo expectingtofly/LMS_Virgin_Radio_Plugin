@@ -588,6 +588,7 @@ sub liveMetaData {
 				title =>  $title,
 				realTitle => $title,
 				artist => STATION_NAMES->{$v->{'liveStation'}},
+				album => $title,
 				cover => $image,
 				realCover => $image,
 				icon => $image,
