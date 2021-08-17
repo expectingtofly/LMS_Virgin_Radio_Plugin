@@ -49,7 +49,7 @@ use constant URL_LIVESTREAM => {
 	'chilled' => 'https://radio.virginradio.co.uk/stream-chilled',
 	'groove' => 'https://radio.virginradio.co.uk/stream-groove'
 };
-use constant URL_ONAIR => 'https://virginradio.co.uk/sites/default/files/on_air_now_json_virgin.js';
+use constant URL_ONAIR => 'https://virginradio.co.uk/api/get-station-data';
 
 use constant URL_RECENTLYPLAYED => {
 	'vir' => 'https://virginradio.co.uk/sites/virginradio.co.uk/files/nocache/now_lastsongs_json.json',
@@ -59,10 +59,17 @@ use constant URL_RECENTLYPLAYED => {
 };
 
 use constant STATION_NAMES => {
-	'vir' => 'Virgin Radio',
+	'vir' => 'Virgin Radio UK',
 	'anthems' => 'Virgin Radio Anthems',
 	'chilled' => 'Virgin Radio Chilled',
 	'groove' => 'Virgin Radio Groove'
+};
+
+use constant STATION_IDENT => {
+	'vir' => 'virginradiouk',
+	'anthems' => 'virginradioanthems',
+	'chilled' => 'virginradiochilled',
+	'groove' => 'virginradiogroove'
 };
 use constant CHUNK_SIZE => 1800;
 use constant TRACK_OFFSET => 20;
@@ -465,6 +472,9 @@ sub liveTrackData{
 	my $client = ${*$self}{'client'};
 	my $song = $client->playingSong();
 
+	my $url = Plugins::VirginRadio::ProtocolHandler::URL_ONAIR . '?station=' . STATION_IDENT->{$v->{'liveStation'}} . '&withSongs=1&hasPrograms=1';
+	main::INFOLOG && $log->is_info && $log->info("Meta URL is : $url");
+
 
 	Slim::Networking::SimpleAsyncHTTP->new(
 		sub {
@@ -473,38 +483,25 @@ sub liveTrackData{
 
 			main::DEBUGLOG && $log->is_debug && $log->debug('Reading Track data');
 
-			#decode the json
-			my $suffix = $v->{'liveStation'};
-			$suffix = 'virgin' if $v->{'liveStation'} eq 'vir';
-			$content =~ s/^jsonCallback_$suffix\(//;
-			$content =~ s/\);$//;
+			#decode the json	
 
 			my $jsonTrack = decode_json $content;
 
 			main::DEBUGLOG && $log->is_debug && $log->debug('Raw track meta Data : ' . $content);
 
-			my $validFrom = $jsonTrack->{nowplaying}[0]->{time};
-			my $duration  = $jsonTrack->{nowplaying}[0]->{duration};
+			my $validFrom = str2time($jsonTrack->{recentlyPlayed}[0]->{startTime});
+			my $validTo  = str2time($jsonTrack->{recentlyPlayed}[0]->{endTime});
+			
+			my $durSeconds = $validTo - $validFrom;
 
-			#hard coding the seconds to 4 minutes, as converting causes problems on some os and its always 4 mins anyway!
-			my $durSeconds = 240;
+			main::DEBUGLOG && $log->is_debug && $log->debug("Time Data : $validFrom $validTo - $durSeconds -  time now : " . time() );
 
-			my $validTime =  str2time($validFrom) + TRACK_OFFSET;
-			my $validEndTime = $validTime + $durSeconds;
-
-			main::DEBUGLOG && $log->is_debug && $log->debug("Track Time Data - Valid From $validFrom Duration $duration Duration Seconds $durSeconds ValidTime $validTime Valid End Time $validEndTime Now " . time());
-
-
-			if ((time() > $validTime) && ($validEndTime >time()) && (($validEndTime-time()) > 30) ) {
-				my $artist = $jsonTrack->{nowplaying}[0]->{artist};
-				my $title = $jsonTrack->{nowplaying}[0]->{title};
-				my $image = $jsonTrack->{nowplaying}[0]->{imageUrl};
-				my $album = $jsonTrack->{nowplaying}[0]->{album};
+			if ( (time() > $validFrom) && ($validTo > time()) && (($validTo-time()) > 30) ) {
+				my $artist = $jsonTrack->{recentlyPlayed}[0]->{artist};
+				my $title = $jsonTrack->{recentlyPlayed}[0]->{title};
 
 				if (my $meta = $song->pluginData('meta')) {
-					$meta->{title} = "$title  by $artist ($album)";
-					$meta->{icon} =  $image;
-					$meta->{cover} =  $image;
+					$meta->{title} = "$title by $artist ";					
 
 					main::DEBUGLOG && $log->is_debug && $log->debug('Dump of track meta data  : ' .  Dumper($meta));
 
@@ -516,7 +513,7 @@ sub liveTrackData{
 
 					#the title will be set when the current buffer is done
 					Slim::Music::Info::setDelayedCallback( $client, $cb, 'output-only' );
-					Slim::Utils::Timers::setTimer($self, $validEndTime, \&liveTrackData);
+					Slim::Utils::Timers::setTimer($self, $validTo, \&liveTrackData);
 				} else {
 
 					#not there come back in 2 minutes
@@ -524,13 +521,11 @@ sub liveTrackData{
 					Slim::Utils::Timers::setTimer($self, (time() + 120), \&liveTrackData);
 				}
 
-			}else {
+			} else {
 
 				#set it all back
 				if (my $meta = $song->pluginData('meta')) {
 					$meta->{title} = $meta->{realTitle};
-					$meta->{icon} =  $meta->{realIcon};
-					$meta->{cover} =  $meta->{realCover};
 
 					my $cb = sub {
 						$song->pluginData( meta  => $meta );
@@ -556,7 +551,9 @@ sub liveTrackData{
 			#try again in 2 minutes
 			Slim::Utils::Timers::setTimer($self, (time() + 120), \&liveTrackData);
 		}
-	)->get(Plugins::VirginRadio::ProtocolHandler::URL_RECENTLYPLAYED->{$v->{'liveStation'}});
+	)->get($url);
+
+	return;
 }
 
 
@@ -564,6 +561,10 @@ sub liveMetaData {
 	my $self = shift;
 
 	my $v = $self->vars;
+
+	my $url = Plugins::VirginRadio::ProtocolHandler::URL_ONAIR . '?station=' . STATION_IDENT->{$v->{'liveStation'}} . '&hasPrograms=1';
+
+	main::INFOLOG && $log->is_info && $log->info("Meta URL is : $url");
 
 
 	$log->debug('In readMetaData ');
@@ -576,24 +577,12 @@ sub liveMetaData {
 
 			$log->debug('Response ' . $content);
 
-			#decode the json
-			$content =~ s/^jsonCallback\(//;
-			$content =~ s/\);$//;
-			my $jsonOnAir = decode_json $content;
-
-			my $station = $v->{'liveStation'};
-			if ($station ne 'vir') {
-				$station = 'vir_' . $station;
-			}
+			#decode the json			
+			my $jsonOnAir = decode_json $content;		
 
 
-			my $title =  $jsonOnAir->{$station}->{show};
-
-			my $image = $title;
-			$image =~ s/ /-/ig;
-			$image = lc $image;
-			$image = Plugins::VirginRadio::ProtocolHandler::URL_IMAGES . $image . '.jpg';
-
+			my $title =  $jsonOnAir->{onAirNow}->{title};
+			my $image = $jsonOnAir->{onAirNow}->{images}[0]->{url};
 
 			my $meta = {
 				title =>  $title,
@@ -608,7 +597,9 @@ sub liveMetaData {
 
 			main::DEBUGLOG && $log->is_debug && $log->debug('Dump of Meta Data ' . Dumper($meta));
 
-			my $checkagain =  $jsonOnAir->{'vir'}->{'start-time'} + $jsonOnAir->{'vir'}->{'duration'} + 10;
+		    my $progEndTime = str2time($jsonOnAir->{onAirNow}->{endTime});
+
+			my $checkagain =  $progEndTime + 10;
 
 			if ($checkagain < (time()+30)){
 				$checkagain = time() + 120;
@@ -617,7 +608,7 @@ sub liveMetaData {
 			my $client = ${*$self}{'client'};
 			my $song = $client->playingSong();
 			$song->pluginData( meta  => $meta );
-			Slim::Control::Request::notifyFromArray( $song->master,['newmetadata'] );
+			Slim::Control::Request::notifyFromArray( $client ,['newmetadata'] );
 
 
 			Slim::Utils::Timers::setTimer($self, $checkagain, \&liveMetaData);
@@ -630,8 +621,9 @@ sub liveMetaData {
 			#try again in 2 minutes
 			Slim::Utils::Timers::setTimer($self, (time() + 120), \&liveMetaData);
 		}
-	)->get(Plugins::VirginRadio::ProtocolHandler::URL_ONAIR);
-
+	)->get($url);
+	
+	return;
 }
 
 
