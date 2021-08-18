@@ -31,6 +31,7 @@ use Data::Dumper;
 use POSIX qw(strftime);
 use HTTP::Date;
 use HTML::TreeBuilder::XPath;
+use JSON::XS::VersionOneAndTwo;
 use Digest::MD5 qw(md5_hex);
 
 use Plugins::VirginRadio::Utilities;
@@ -53,46 +54,47 @@ sub toplevel {
 			name => 'Live Virgin Radio Stations',
 			image    => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO_LIVE,
 			items => [
-					{
-						name        => 'Virgin Radio UK',
-						type        => 'audio',
-						cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO,
-						image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO,
-						icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO,
-						url         => 'virgin://_LIVE_vir',
-						on_select   => 'play'
-					},
-					{
-						name        => 'Virgin Radio Anthems',
-						type        => 'audio',
-						cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOANTHEMS,
-						image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOANTHEMS,
-						icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOANTHEMS,
-						url         => 'virgin://_LIVE_anthems',
-						on_select   => 'play'
-					},
-					{
-						name        => 'Virgin Radio Chilled',
-						type        => 'audio',
-						cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOCHILLED,
-						image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOCHILLED,
-						icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOCHILLED,
-						url         => 'virgin://_LIVE_chilled',
-						on_select   => 'play'
-					},					,
-					{
-						name        => 'Virgin Radio Groove',
-						type        => 'audio',
-						cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOGROOVE,
-						image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOGROOVE,
-						icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOGROOVE,
-						url         => 'virgin://_LIVE_groove',
-						on_select   => 'play'
-					}
-					]
+				{
+					name        => 'Virgin Radio UK',
+					type        => 'audio',
+					cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO,
+					image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO,
+					icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO,
+					url         => 'virgin://_LIVE_vir',
+					on_select   => 'play'
+				},
+				{
+					name        => 'Virgin Radio Anthems',
+					type        => 'audio',
+					cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOANTHEMS,
+					image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOANTHEMS,
+					icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOANTHEMS,
+					url         => 'virgin://_LIVE_anthems',
+					on_select   => 'play'
+				},
+				{
+					name        => 'Virgin Radio Chilled',
+					type        => 'audio',
+					cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOCHILLED,
+					image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOCHILLED,
+					icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOCHILLED,
+					url         => 'virgin://_LIVE_chilled',
+					on_select   => 'play'
+				},
+				,
+				{
+					name        => 'Virgin Radio Groove',
+					type        => 'audio',
+					cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOGROOVE,
+					image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOGROOVE,
+					icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOGROOVE,
+					url         => 'virgin://_LIVE_groove',
+					on_select   => 'play'
+				}
+			]
 		},
 		{
-			name => 'Schedule',
+			name => 'Schedule & Catchup',
 			image => Plugins::VirginRadio::Utilities::IMG_SCHEDULE,
 			type => 'link',
 			url  => \&getDayMenu
@@ -117,7 +119,7 @@ sub getDayMenu {
 	my $menu      = [];
 
 
-	for ( my $i = 0 ; $i < 8 ; $i++ ) {
+	for ( my $i = 0 ; $i < 5 ; $i++ ) {
 		my $d = '';
 		my $epoch = $now - ( 86400 * $i );
 		if ( $i == 0 ) {
@@ -152,98 +154,177 @@ sub getDayMenu {
 sub getSchedulePage {
 	my ( $client, $callback, $args, $passDict ) = @_;
 
-	main::DEBUGLOG && $log->is_debug && $log->debug("++getSchedulePage");	
+	main::DEBUGLOG && $log->is_debug && $log->debug("++getSchedulePage");
 
 
-	my $menu = [];
-
-	$log->info('Getting day menu');
-
-	my $callUrl =  Plugins::VirginRadio::Utilities::URL_VIRGINSCHEDULE . $passDict->{'scheduledate'};
-
-	if ( my $cachemenu = _getCachedMenu($callUrl) ) {
+	if ( my $cachemenu = _getCachedMenu('VIRGINRADIO_SCHEDULE_MENU' . $passDict->{'scheduledate'}) ) {
 
 		$callback->( { items => $cachemenu } );
-		main::DEBUGLOG && $log->is_debug && $log->debug("--getSchedulePage cached menu");	
+		main::DEBUGLOG && $log->is_debug && $log->debug("--getSchedulePage cached menu");
 		return;
 	}
 
+	my $menu = [];
 
-	Slim::Networking::SimpleAsyncHTTP->new(
+	getScheduleAsJSON(
 		sub {
-			my $http = shift;
-
-			$log->debug('Schedule retreived');
-			_parseSchedule( $http,  $menu);
-			_cacheMenu($callUrl, $menu, 600);			
-
+			my $schedJSON = shift;
+			_parseSchedule($schedJSON, $menu, $passDict->{'scheduledate'} );
+			_cacheMenu('VIRGINRADIO_SCHEDULE_MENU' . $passDict->{'scheduledate'}, $menu, 600);
 			$callback->( { items => $menu } );
 		},
-
-		# Called when no response was received or an error occurred.
 		sub {
-			$log->warn("error: $_[1]");
-			$callback->( [ { name => $_[1], type => 'text' } ] );
+			$log->error("Could not retreive schedule menu");
+			$callback->( [ { name => 'Error retrieving schedule', type => 'text' } ] );
 		}
-	)->get($callUrl);
+	);
 
-	main::DEBUGLOG && $log->is_debug && $log->debug("--getSchedulePage");	
+	main::DEBUGLOG && $log->is_debug && $log->debug("--getSchedulePage");
 	return;
+}
 
+
+sub getScheduleAsJSON {
+	my ( $cbY, $cbN ) = @_;
+	main::DEBUGLOG && $log->is_debug && $log->debug("++getScheduleAsJSON");
+
+	if (my $cachedSched = _getCachedMenu('VIRGIN_RADIO_SCHEDULE')) {
+		$cbY->($cachedSched);
+	} else {
+
+		my $callUrl =  Plugins::VirginRadio::Utilities::URL_VIRGINSCHEDULE;
+
+		Slim::Networking::SimpleAsyncHTTP->new(
+			sub {
+				my $http = shift;
+				$log->debug('Schedule retreived');
+				my $sched = _parseScheduleJSON($http);
+
+				_cacheMenu('VIRGIN_RADIO_SCHEDULE', $sched, 3600);
+				$cbY->($sched);
+			},
+
+			# Called when no response was received or an error occurred.
+			sub {
+				$log->warn("error: $_[1]");
+				$cbN->();
+			}
+		)->get($callUrl);
+	}
+
+	main::DEBUGLOG && $log->is_debug && $log->debug("--getScheduleAsJSON");
+	return;
+}
+
+
+sub getAODFromID {
+	my ($id, $cbY, $cbN) = @_;
+	main::DEBUGLOG && $log->is_debug && $log->debug("++getAODFromID");
+
+	getScheduleAsJSON(
+		sub {
+			my $JSON = shift;
+			if (my $itemJSON = _findRecordingFromID($id, $JSON)) {
+				$cbY->($itemJSON);
+			} else {
+				$cbN->();
+			}
+		},
+		$cbN
+	);
+
+	main::DEBUGLOG && $log->is_debug && $log->debug("--getAODFromID");
+	return;
+}
+
+
+sub _findRecordingFromID {
+	my ($id, $scheduleJSON) = @_;
+	main::DEBUGLOG && $log->is_debug && $log->debug("++_findRecordingFromID");
+
+	my $scheduleJSONNode = $scheduleJSON->{props}->{pageProps}->{schedules};
+
+	for my $schedN (@$scheduleJSONNode) {
+		my $items = $schedN->{shows};
+		for my $item (@$items) {
+			if ($item->{id} eq $id) {
+				main::DEBUGLOG && $log->is_debug && $log->debug("Recording found for $id ");
+				return $item;
+			}
+		}
+	}
+
+	$log->warn("Recording not found for id $id");
+	main::DEBUGLOG && $log->is_debug && $log->debug("--_findRecordingFromID");
+	return;
+}
+
+
+sub _parseScheduleJSON {
+	my $http        = shift;
+	main::DEBUGLOG && $log->is_debug && $log->debug("++_parseScheduleJSON");
+
+	my $tree= HTML::TreeBuilder::XPath->new;
+	$tree->parse_content( $http->contentRef );
+
+	my $scheduleNode = $tree->findnodes('/html/body//script[@id="__NEXT_DATA__"]')->[0];
+
+	my $chNodes = $scheduleNode->getChildNodes();
+
+	my $strSchedule = @$chNodes[0]->getValue();
+
+	main::DEBUGLOG && $log->is_debug && $log->debug("Schedule : $strSchedule");
+
+	my $schedule= decode_json $strSchedule;
+
+	$tree->delete;
+
+	main::DEBUGLOG && $log->is_debug && $log->debug("--_parseScheduleJSON");
+	return $schedule;
 }
 
 
 sub _parseSchedule {
-	my $http        = shift;
+	my $scheduleJSON = shift;
 	my $menu        = shift;
-	main::DEBUGLOG && $log->is_debug && $log->debug("++_parseSchedule");	
-
-	my $tree= HTML::TreeBuilder::XPath->new;
-	$tree->parse_content( $http->contentRef);	
-	my $scheduleNode = $tree->findnodes('/html/body/div[@id="page-wrapper"]/div/div[@id="main-wrapper"]//div[@id="radio-schedule"]');
-	my $topNode = $scheduleNode->pop();	
-
-	my $imageNodes = $topNode->findnodes('.//div[@class="schedule__pic"]/img');		
-	my $scheduleNodes = $topNode->findnodes('.//div[@class="schedule__showtime"]');		
-	my $showNameNodes = $topNode->findnodes('.//a[@class="schedule__showname"]');
-	
-
-	my $bound = (scalar @$scheduleNodes)-1;
-	my $image = '';
-	for my $i (0..$bound) {
-
-		$image = @$imageNodes[$i]->attr('src');
-
-		#workaround for broken virgin image
-		if ($image =~ /virgin-radio-through-the-night/) {
-			$image = Plugins::VirginRadio::Utilities::IMG_DEFAULT_IMAGE;
-		}
+	my $scheduleDate = shift;
+	main::DEBUGLOG && $log->is_debug && $log->debug("++_parseSchedule");
 
 
-		push @$menu,
-		{
-			name => @$scheduleNodes[$i]->string_value . ' ' . @$showNameNodes[$i]->string_value,
-			image => $image,
-			url => '',
-			type => 'a',
-			on_select   => ''		  
+	my $scheduleJSONNode = $scheduleJSON->{props}->{pageProps}->{schedules};
+
+	for my $schedN (@$scheduleJSONNode) {
+		if ($schedN->{date} eq $scheduleDate) {
+			my $items = $schedN->{shows};
+			for my $item (@$items) {
+
+				my $sttim = str2time( $item->{'startTime'} );
+				my $sttime = strftime( '%H:%M ', localtime($sttim) );
+
+				if (defined $item->{recording}) {
+					push @$menu,
+					  {
+						name => $sttime . ' ' . $item->{title} . ' - ' . $item->{description},
+						image => $item->{images}[0]->{url},
+						url => 'virgin://_AOD_' . $item->{id} . '_' . uri_escape($item->{recording}->{url}),
+						type => 'audio',
+						on_select   => 'play'
+					  };
+				} else {
+					push @$menu,{
+						name => $sttime . ' ' . $item->{title} . ' - ' . $item->{description},
+						image => $item->{images}[0]->{url}
+
+					};
+				}
+			}
 		}
 	}
 
-	my $AOD = $topNode->findnodes('.//a[@class = "btn btn--play btn--red listen-again"]');
-
-	$bound = (scalar @$AOD)-1;
-
-	for my $i2 (0..$bound) {
-		my @epoch = split /\//, @$AOD[$i2]->attr('href');
-		@$menu[$i2]->{url} = 'virgin://_AOD_' . pop @epoch;
-		@$menu[$i2]->{type} = 'audio';
-		@$menu[$i2]->{on_select}  = 'play';
-	}
-
-	$tree->delete;
 	main::DEBUGLOG && $log->is_debug && $log->debug("--_parseSchedule");
+	return;
 }
+
 
 sub _getCachedMenu {
 	my $url = shift;
@@ -263,7 +344,7 @@ sub _getCachedMenu {
 
 
 sub _cacheMenu {
-	my ( $url, $menu, $seconds ) = @_;	
+	my ( $url, $menu, $seconds ) = @_;
 	main::DEBUGLOG && $log->is_debug && $log->debug("++_cacheMenu");
 	my $cacheKey = 'VR:' . md5_hex($url);
 	$cache->set( $cacheKey, \$menu, $seconds );
@@ -271,7 +352,6 @@ sub _cacheMenu {
 	main::DEBUGLOG && $log->is_debug && $log->debug("--_cacheMenu");
 	return;
 }
-
 
 
 1;

@@ -26,11 +26,13 @@ use Slim::Utils::Log;
 use Slim::Networking::Async::HTTP;
 use Slim::Utils::Cache;
 
-use POSIX;
 use HTTP::Date;
 use JSON::XS::VersionOneAndTwo;
 use Data::Dumper;
 use Time::ParseDate;
+use URI::Escape;
+use Plugins::VirginRadio::VirginRadioFeeder;
+
 
 Slim::Player::ProtocolHandlers->registerHandler('virgin', __PACKAGE__);
 
@@ -121,7 +123,8 @@ sub new {
 
 		Slim::Music::Info::setDuration( $song->track(),  $streamDetails->{durationSecs} );
 		my $meta = {
-			title =>  $streamDetails->{title} . ' - ' .  $streamDetails->{subtitle},
+			title =>  $streamDetails->{title},
+			artist => $streamDetails->{subtitle},
 			duration => 	 $streamDetails->{durationSecs},
 			cover => $streamDetails->{image},
 			icon => $streamDetails->{image},
@@ -162,9 +165,10 @@ sub close {
 
 }
 
+
 sub canDirectStream {
 	my ($classOrSelf, $client, $url, $inType) = @_;
-	
+
 	main::DEBUGLOG && $log->is_debug && $log->debug('Never direct stream');
 
 	return 0;
@@ -183,13 +187,13 @@ sub getMetadataFor {
 	my ($url) = $full_url =~ /([^&]*)/;
 	my $song = $client->playingSong();
 
-	main::DEBUGLOG && $log->is_debug && $log->debug("getmetadata: $url");
+	#main::DEBUGLOG && $log->is_debug && $log->debug("getmetadata: $url");
 
 	if ( $song && $song->currentTrack()->url eq $full_url ) {
 
 		if (my $meta = $song->pluginData('meta')) {
 
-			main::DEBUGLOG && $log->is_debug && $log->debug("meta from song");
+			#main::DEBUGLOG && $log->is_debug && $log->debug("meta from song");
 			$song->track->secs( $meta->{duration} );
 			return $meta;
 		}
@@ -217,8 +221,8 @@ sub getNextTrack {
 
 		my $streamUrl = Plugins::VirginRadio::ProtocolHandler::URL_LIVESTREAM->{_liveStation($masterUrl)};
 
-		main::DEBUGLOG && $log->is_debug && $log->debug("Setting Live Stream $streamUrl " . 128_000);		
-		
+		main::DEBUGLOG && $log->is_debug && $log->debug("Setting Live Stream $streamUrl " . 128_000);
+
 		$song->streamUrl($streamUrl);
 		$song->track->bitrate(128_000);
 
@@ -226,118 +230,69 @@ sub getNextTrack {
 	}
 	if (_isAOD($masterUrl)) {
 
-		#AOD
-		my $nextIndex = $song->pluginData('nextPlaylistIndex');
+		my $id = _AODUrlID($masterUrl);
+		main::DEBUGLOG && $log->is_debug && $log->debug("ID from URL is $id");
+		_getStreamDetails($id, $song, $successCb, $errorCb);
 
-
-		if (defined $nextIndex) {
-			my $details = $song->pluginData('streamDetails');
-
-			#we may be at the end
-			if ($nextIndex >= $details->{playlistSize}) {
-				main::DEBUGLOG && $log->is_debug && $log->debug('End of repeating stream');
-				return;
-			}
-
-			my $playlist = $details->{playlist};
-
-			my $sources = @$playlist[$nextIndex]->{sources};
-			my $stream = @$sources[0]->{src};			
-			$song->streamUrl($stream);
-			$song->track->bitrate(128_000);
-			$song->pluginData( nextTrackOffset   => ($nextIndex * CHUNK_SIZE) );
-
-			$nextIndex++;
-			$song->pluginData( nextPlaylistIndex   => $nextIndex );
-
-
-			$successCb->();
-		}else {
-			my $epoch = _AODUrlEpoch($masterUrl);
-			_getStreamDetails($epoch, $song, $successCb);
-		}
 	}
 }
 
 
 sub _getStreamDetails {
-	my ( $epoch, $song, $successCb ) = @_;
+	my ( $id, $song, $successCb, $errorCb ) = @_;
 
-	my $callUrl = Plugins::VirginRadio::ProtocolHandler::URL_AOD . $epoch;
-
-
-	Slim::Networking::SimpleAsyncHTTP->new(
+	Plugins::VirginRadio::VirginRadioFeeder::getAODFromID(
+		$id,
 		sub {
-			my $http = shift;
-			my $content = ${$http->contentRef};
+			my $JSON = shift;
 
-			#playlist
-			my $playlist ='';
-			my $start ='';
-			my $end = '';
-			($start, $playlist, $end) = $content =~ /(vid\.playlist\(\[)(.*)(\,]\);)/gs;
-			$playlist = '[' . $playlist . ']';
+			#The duration in the JSON is unreliable, so we have to work it out.
 
-			#fix up to make json comapatible
-			$playlist =~ s/sources:/"sources":/ig;
-			$playlist =~ s/src:/"src":/ig;
-			$playlist =~ s/type:/"type":/ig;
+			my $dur = str2time( $JSON->{'endTime'} ) - str2time( $JSON->{'startTime'} );
 
-
-			$log->debug('Playlist  : ' .  $playlist);
-
-
-			my $jsonPlaylist = decode_json $playlist;
-
-			#titles
-			my $title = '';
-			($start, $title, $end) = $content =~ /(<h2 class="h2radioshowheader listen-again__title">)(.*)(<\/h2>)/;
-
-			my $subTitle = '';
-			($start, $subTitle, $end) = $content =~ /(<h3 class="h3radioshowheader listen-again__subtitle">)(.*)(<\/h3>)/;
-
-
-			my $image = $title;
-			$image =~ s/ /-/ig;
-			$image = lc $image;
-			$image = Plugins::VirginRadio::ProtocolHandler::URL_IMAGES . $image . '.jpg';
-
-			my $playlistsize = scalar @$jsonPlaylist;
-			my $duration = $playlistsize * 30 * 60;
-
-			$log->debug($playlistsize . ' : ' .  $duration);
 
 			my $AOD_Details = {
-				title => $title,
-				subtitle => $subTitle,
-				playlistSize => $playlistsize,
-				durationSecs => $duration,
-				playlist => $jsonPlaylist,
-				image => $image,
-
+				title => $JSON->{title},
+				subtitle => $JSON->{description},
+				durationSecs => $dur,
+				track => $JSON->{recording}->{url},
+				image => $JSON->{images}[0]->{url},
 			};
-
 			main::DEBUGLOG && $log->is_debug && $log->debug('Dump of AOD details  : ' .  Dumper($AOD_Details));
 
 			$song->pluginData( streamDetails   => $AOD_Details );
-			$song->pluginData( nextPlaylistIndex   => 1 );
-			$song->pluginData( nextTrackOffset   => 0 );
+			$song->duration($AOD_Details->{durationSecs} );
 
-			my $sources = @$jsonPlaylist[0]->{sources};
-			my $stream = @$sources[0]->{src};
-			$song->duration($duration);
-			$song->streamUrl($stream);
-
-			$successCb->();
+			#always a redirect for aod
+			my $http = Slim::Networking::Async::HTTP->new;
+			my $request = HTTP::Request->new( GET => $AOD_Details->{track} );
+			$http->send_request(
+				{
+					request     => $request,
+					onHeaders => sub {
+						my $http = shift;
+						my $trackurl = $http->request->uri->as_string;
+						main::DEBUGLOG && $log->is_debug && $log->debug("Redirected AOD URL is : $trackurl");
+						$song->streamUrl($trackurl);
+						$song->track->bitrate(128_000);
+						$http->disconnect;
+						$successCb->();
+					},
+					onError => sub {
+						my ( $http, $self ) = @_;
+						my $res = $http->response;
+						$log->error('Error status - ' . $res->status_line );
+						$errorCb->();
+					}
+				}
+			);
 
 		},
-
-		# Called when no response was received or an error occurred.
 		sub {
-			$log->error("error: $_[1]");
-
+			$log->error("Failed to get AOD stream details for $id");
+			$errorCb->();
 		}
-	)->get($callUrl);
+	);
 
 }
 
@@ -345,109 +300,8 @@ sub _getStreamDetails {
 sub isRepeatingStream {
 	my ( undef, $song ) = @_;
 
-	my $masterUrl = $song->track()->url;
+	return 0;
 
-
-	if (_isAOD($masterUrl)) {
-		return 1;
-	}else {
-		return 0;
-	}
-}
-
-
-sub parseDirectHeaders {
-	my $class   = shift;
-	my $client  = shift || return;
-	my $url     = shift;
-	my @headers = @_;
-
-	my $song = ${*$class}{'song'} if blessed $class;
-
-	if (!$song && $client->controller()->songStreamController()) {
-		$song = $client->controller()->songStreamController()->song();
-	}
-
-	my $details = $song->pluginData('streamDetails');
-
-
-	if (defined $details) {
-
-		my $bitrate     = $client->streamingSong->bitrate || 128_000;
-		my $contentType = 'mp3';
-
-		# Clear previous duration, since we're using the same URL for all tracks
-		Slim::Music::Info::setDuration( $url, 0 );
-
-		# Grab content-length for progress bar
-		my $length;
-		my $rangelength;
-
-		foreach my $header (@headers) {
-			if ( $header =~ /^Content-Length:\s*(.*)/i ) {
-				$length = $1;
-			}elsif ( $header =~ m{^Content-Range: .+/(.*)}i ) {
-				$rangelength = $1;
-				last;
-			}
-		}
-
-		if ($rangelength) {
-			$length = $rangelength;
-		}
-
-		$length = $length * $details->{playlistSize};
-
-		$client->streamingSong->bitrate($bitrate);
-		$client->streamingSong->duration( $details->{durationSecs});
-
-		main::INFOLOG && $log->info( "Setting bitrate $bitrate and duration $details->{durationSecs} in as part of direct headers");
-
-		my $startOffset = $song->pluginData('nextTrackOffset');
-		if ($startOffset) {
-			$song->startOffset($startOffset);
-		}
-
-		# title, bitrate, metaint, redir, type, length, body
-		return (undef, $bitrate, 0, undef, $contentType, $length, undef);
-	}else {
-
-		#Must be live stream
-		return $class->SUPER::parseDirectHeaders($client, $url, @headers);
-	}
-}
-
-
-sub getSeekData {
-	my ( $class, $client, $song, $newtime ) = @_;
-
-	main::DEBUGLOG && $log->is_debug && $log->debug('Trying to seek ' . $newtime );
-
-	#may need to switch chunked stream
-	my $details = $song->pluginData('streamDetails');
-
-	my $newIndex = floor($newtime / CHUNK_SIZE);
-
-	my $playlist = $details->{playlist};
-
-	my $sources = @$playlist[$newIndex]->{sources};
-	my $stream = @$sources[0]->{src};
-
-	$song->streamUrl($stream);
-
-	my $offset = ( ($song->bitrate || 128_000) / 8 ) * (CHUNK_SIZE * $newIndex);
-
-	main::INFOLOG && $log->info( 'Stream is ' . $stream . ' index ' . $newIndex . ' offset ' . $offset);
-
-	$newIndex++;
-	$song->pluginData( nextPlaylistIndex   => $newIndex );
-	$song->pluginData( nextTrackOffset   => 0 );
-
-
-	return {
-		sourceStreamOffset => (( ($song->bitrate || 128_000) / 8 ) * $newtime) - $offset,
-		timeOffset         => $newtime,
-	};
 }
 
 
@@ -457,6 +311,7 @@ sub canSeek {
 	my $masterUrl = $song->track()->url;
 
 	if (_isAOD($masterUrl)) {
+		main::DEBUGLOG && $log->is_debug && $log->debug('Can Seek');
 		return 1;
 	}else {
 		return 0;
@@ -483,7 +338,7 @@ sub liveTrackData{
 
 			main::DEBUGLOG && $log->is_debug && $log->debug('Reading Track data');
 
-			#decode the json	
+			#decode the json
 
 			my $jsonTrack = decode_json $content;
 
@@ -491,17 +346,19 @@ sub liveTrackData{
 
 			my $validFrom = str2time($jsonTrack->{recentlyPlayed}[0]->{startTime});
 			my $validTo  = str2time($jsonTrack->{recentlyPlayed}[0]->{endTime});
-			
+
 			my $durSeconds = $validTo - $validFrom;
 
 			main::DEBUGLOG && $log->is_debug && $log->debug("Time Data : $validFrom $validTo - $durSeconds -  time now : " . time() );
 
-			if ( (time() > $validFrom) && ($validTo > time()) && (($validTo-time()) > 30) ) {
+			my $timenow = time();
+
+			if ( ($timenow > $validFrom ) && ($validTo >= $timenow )) {
 				my $artist = $jsonTrack->{recentlyPlayed}[0]->{artist};
 				my $title = $jsonTrack->{recentlyPlayed}[0]->{title};
 
 				if (my $meta = $song->pluginData('meta')) {
-					$meta->{title} = "$title by $artist ";					
+					$meta->{title} = "$title by $artist ";
 
 					main::DEBUGLOG && $log->is_debug && $log->debug('Dump of track meta data  : ' .  Dumper($meta));
 
@@ -513,7 +370,12 @@ sub liveTrackData{
 
 					#the title will be set when the current buffer is done
 					Slim::Music::Info::setDelayedCallback( $client, $cb, 'output-only' );
-					Slim::Utils::Timers::setTimer($self, $validTo, \&liveTrackData);
+					my $nextTimer = ($validTo + 10);
+
+					if ($nextTimer < (time()+30)) {
+						$nextTimer = (time()+30);
+					}
+					Slim::Utils::Timers::setTimer($self, $nextTimer, \&liveTrackData);
 				} else {
 
 					#not there come back in 2 minutes
@@ -534,7 +396,7 @@ sub liveTrackData{
 
 					#the title will be set when the current buffer is done
 					Slim::Music::Info::setDelayedCallback( $client, $cb, 'output-only' );
-					Slim::Utils::Timers::setTimer($self, (time() + 90), \&liveTrackData);
+					Slim::Utils::Timers::setTimer($self, (time() + 120), \&liveTrackData);
 				}else {
 
 					#not there come back in 2 minutes
@@ -577,8 +439,8 @@ sub liveMetaData {
 
 			$log->debug('Response ' . $content);
 
-			#decode the json			
-			my $jsonOnAir = decode_json $content;		
+			#decode the json
+			my $jsonOnAir = decode_json $content;
 
 
 			my $title =  $jsonOnAir->{onAirNow}->{title};
@@ -598,7 +460,7 @@ sub liveMetaData {
 
 			main::DEBUGLOG && $log->is_debug && $log->debug('Dump of Meta Data ' . Dumper($meta));
 
-		    my $progEndTime = str2time($jsonOnAir->{onAirNow}->{endTime});
+			my $progEndTime = str2time($jsonOnAir->{onAirNow}->{endTime});
 
 			my $checkagain =  $progEndTime + 10;
 
@@ -609,7 +471,7 @@ sub liveMetaData {
 			my $client = ${*$self}{'client'};
 			my $song = $client->playingSong();
 			$song->pluginData( meta  => $meta );
-			Slim::Control::Request::notifyFromArray( $client ,['newmetadata'] );
+			Slim::Control::Request::notifyFromArray( $client,['newmetadata'] );
 
 
 			Slim::Utils::Timers::setTimer($self, $checkagain, \&liveMetaData);
@@ -623,7 +485,7 @@ sub liveMetaData {
 			Slim::Utils::Timers::setTimer($self, (time() + 120), \&liveMetaData);
 		}
 	)->get($url);
-	
+
 	return;
 }
 
@@ -635,41 +497,63 @@ sub scanUrl {
 
 	my $urlToScan = '';
 
+	my $realcb = $args->{cb};
+
+
 	if (_isLive($url)) {
 		$urlToScan = Plugins::VirginRadio::ProtocolHandler::URL_LIVESTREAM->{_liveStation($url)};
-	}else {
-		$urlToScan = getAODUrl($url);
+		$args->{cb} = sub {
+			$realcb->($args->{song}->currentTrack());
+		};
+
+	} else {
+		$urlToScan = _AODUrl($url);
+
+		$args->{cb} = sub {
+			my $track = shift;
+
+			my $client = $args->{client};
+			my $song = $client->playingSong();
+			main::DEBUGLOG && $log->is_debug && $log->debug("Setting bitrate");
+
+			if ( $song && $song->currentTrack()->url eq $url ) {
+				my $bitrate = $track->bitrate();
+				main::DEBUGLOG && $log->is_debug && $log->debug("bitrate is : $bitrate");
+				$song->bitrate($bitrate);
+			}
+
+			$realcb->($args->{song}->currentTrack());
+		};
 	}
+
+	#let LMS sort out the real stream
+	Slim::Utils::Scanner::Remote->scanURL($urlToScan, $args);
+
 
 	main::DEBUGLOG && $log->is_debug && $log->debug("scanurl $url actual stream $urlToScan");
 
-	#let LMS sort out the real stream
-	my $realcb = $args->{cb};
-	$args->{cb} = sub {
-		$realcb->($args->{song}->currentTrack());
-	};
-	Slim::Utils::Scanner::Remote->scanURL($urlToScan, $args);
 }
 
 
-sub getAODUrl {
-	my ($url) = @_;
-
-	#translate url into virgin url
-	my $newUrl = URL_CDN . strftime( '%Y%m%d_%H%M_30mins.mp3', localtime(_AODUrlEpoch($url)) );
-
-	return $newUrl;
-}
-
-
-sub _AODUrlEpoch {
+sub _AODUrlID {
 	my ($url) = @_;
 
 	my @urlsplit = split /_/x, $url;
 
-	my $epoch = int($urlsplit[2]);
+	my $id = $urlsplit[2];
 
-	return $epoch;
+	return $id;
+}
+
+
+sub _AODUrl {
+	my ($url) = @_;
+
+	my @urlsplit = split /_/x, $url;
+
+	my $urlOut = $urlsplit[3];
+
+	return uri_unescape($urlOut);
 }
 
 
