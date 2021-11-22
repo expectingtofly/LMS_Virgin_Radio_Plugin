@@ -114,6 +114,7 @@ sub new {
 	${*$self}{'vars'} = {
 		'isLive' => $isLive,
 		'liveStation' => $liveStation,
+		'trackCycle' => 1,
 	};
 
 	if (_isAOD($masterUrl)) {
@@ -327,8 +328,11 @@ sub liveTrackData{
 	my $client = ${*$self}{'client'};
 	my $song = $client->playingSong();
 
-	my $url = Plugins::VirginRadio::ProtocolHandler::URL_ONAIR . '?station=' . STATION_IDENT->{$v->{'liveStation'}} . '&withSongs=1&hasPrograms=1';
+	my $url = Plugins::VirginRadio::ProtocolHandler::URL_ONAIR . '?station=' . STATION_IDENT->{$v->{'liveStation'}} . '&withSongs=1&hasPrograms='. $v->{'trackCycle'};
 	main::INFOLOG && $log->is_info && $log->info("Meta URL is : $url");
+
+	$v->{'trackCycle'}++;  #special number to defeat virgin caching track info
+	if ($v->{'trackCycle'} > 9) { $v->{'trackCycle'} = 1; }
 
 
 	Slim::Networking::SimpleAsyncHTTP->new(
@@ -364,12 +368,13 @@ sub liveTrackData{
 
 
 					my $cb = sub {
-						$song->pluginData( meta  => $meta );
+						$song->pluginData( meta  => $meta );	
+						main::DEBUGLOG && $log->is_debug && $log->debug('Setting Track Title callback');					
 						Slim::Control::Request::notifyFromArray( $client, ['newmetadata'] );
 					};
 
 					#the title will be set when the current buffer is done
-					Slim::Music::Info::setDelayedCallback( $client, $cb, 'output-only' );
+					Slim::Music::Info::setDelayedCallback( $client, $cb );
 					my $nextTimer = ($validTo + 10);
 
 					if ($nextTimer < (time()+30)) {
@@ -389,14 +394,16 @@ sub liveTrackData{
 				if (my $meta = $song->pluginData('meta')) {
 					$meta->{title} = $meta->{realTitle};
 
+					main::DEBUGLOG && $log->is_debug && $log->debug('Setting title back');
 					my $cb = sub {
 						$song->pluginData( meta  => $meta );
+						main::DEBUGLOG && $log->is_debug && $log->debug('Setting title back after callback');
 						Slim::Control::Request::notifyFromArray( $client, ['newmetadata'] );
 					};
 
 					#the title will be set when the current buffer is done
-					Slim::Music::Info::setDelayedCallback( $client, $cb, 'output-only' );
-					Slim::Utils::Timers::setTimer($self, (time() + 120), \&liveTrackData);
+					Slim::Music::Info::setDelayedCallback( $client, $cb );
+					Slim::Utils::Timers::setTimer($self, (time() + 60), \&liveTrackData);
 				}else {
 
 					#not there come back in 2 minutes
