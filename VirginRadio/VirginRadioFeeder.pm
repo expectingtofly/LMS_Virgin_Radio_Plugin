@@ -41,6 +41,9 @@ my $log = logger('plugin.virginradio');
 my $prefs = preferences('plugin.virginradio');
 
 my $cache = Slim::Utils::Cache->new();
+
+my $isWOTR = Slim::Utils::PluginManager->isEnabled('Plugins::WhatsOnTheRadio::Plugin');
+
 sub flushCache { $cache->cleanup(); }
 
 
@@ -61,6 +64,7 @@ sub toplevel {
 					image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO,
 					icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO,
 					url         => 'virgin://_LIVE_vir',
+					itemActions => getItemActions('Virgin Radio Anthems','virgin://_LIVE_vir'),
 					on_select   => 'play'
 				},
 				{
@@ -70,6 +74,7 @@ sub toplevel {
 					image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOANTHEMS,
 					icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOANTHEMS,
 					url         => 'virgin://_LIVE_anthems',
+					itemActions => getItemActions('Virgin Radio Anthems','virgin://_LIVE_anthems'),
 					on_select   => 'play'
 				},
 				{
@@ -79,9 +84,9 @@ sub toplevel {
 					image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOCHILLED,
 					icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOCHILLED,
 					url         => 'virgin://_LIVE_chilled',
+					itemActions => getItemActions('Virgin Radio Chilled','virgin://_LIVE_chilled'),
 					on_select   => 'play'
 				},
-				,
 				{
 					name        => 'Virgin Radio Groove',
 					type        => 'audio',
@@ -89,6 +94,7 @@ sub toplevel {
 					image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOGROOVE,
 					icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOGROOVE,
 					url         => 'virgin://_LIVE_groove',
+					itemActions => getItemActions('Virgin Radio Groove','virgin://_LIVE_groove'),
 					on_select   => 'play'
 				}
 			]
@@ -105,6 +111,27 @@ sub toplevel {
 
 	main::DEBUGLOG && $log->is_debug && $log->debug("--toplevel");
 	return;
+}
+
+
+sub getItemActions {
+	my $name = shift;
+	my $url = shift;
+	if ($isWOTR) {
+		return '';
+	} else {
+		return  {
+			info => {
+				command     => ['wotr', 'addStation'],
+				fixedParams => {
+					name => $name,
+					stationKey => '',
+					url => $url,
+					handlerFunctionKey => 'virginradio'
+				}
+			},
+		};
+	}
 }
 
 
