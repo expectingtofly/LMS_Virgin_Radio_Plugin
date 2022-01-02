@@ -22,12 +22,14 @@ use JSON::XS::VersionOneAndTwo;
 use HTTP::Date;
 use Data::Dumper;
 
+use Plugins::VirginRadio::ProtocolHandler;
+
 my $log = logger('plugin.virginradio');
 
 
-
 sub getStationData {
-	my ( $stationUrl, $stationKey, $nowOrNext, $cbSuccess, $cbError) = @_;
+	my ( $stationUrl, $stationKey, $stationName, $nowOrNext, $cbSuccess, $cbError) = @_;
+	main::DEBUGLOG && $log->is_debug && $log->debug("++getStationData");
 
 	if ($nowOrNext eq 'next') {
 		$log->error('Next not supported');
@@ -35,9 +37,7 @@ sub getStationData {
 		return;
 	}
 
-	my $stationId = Plugins::VirginRadio::ProtocolHandler::_liveStation($stationUrl);
-
-	my $metaUrl = Plugins::VirginRadio::ProtocolHandler::URL_ONAIR . '?station=' . Plugins::VirginRadio::ProtocolHandler::STATION_IDENT->{$stationId} . '&hasPrograms=1';
+	my $metaUrl = Plugins::VirginRadio::ProtocolHandler::URL_ONAIR . '?station=' . Plugins::VirginRadio::ProtocolHandler::STATION_IDENT->{$stationKey} . '&hasPrograms=1';
 
 	main::INFOLOG && $log->is_info && $log->info("Meta URL is : $metaUrl");
 	Slim::Networking::SimpleAsyncHTTP->new(
@@ -46,23 +46,30 @@ sub getStationData {
 			my $content = ${$http->contentRef};
 
 			#decode the json
-			my $jsonOnAir = decode_json $content;			
+			my $jsonOnAir = decode_json $content;
 
 			my $result = {
 				title =>  $jsonOnAir->{onAirNow}->{title},
 				description => '',
 				image => $jsonOnAir->{onAirNow}->{images}[0]->{url},
 				startTime => str2time($jsonOnAir->{onAirNow}->{startTime}),
-				endTime   => str2time($jsonOnAir->{onAirNow}->{endTime})
+				endTime   => str2time($jsonOnAir->{onAirNow}->{endTime}),
+				url       => $stationUrl,
+				stationName => $stationName
 			};
-			
+
 			$cbSuccess->($result);
 
 		},
 		sub {
 			#Couldn't get meta data
 			$log->error('Failed to retrieve on air text');
-			$cbError->($stationUrl);
+			$cbError->(
+				{
+					url       => $stationUrl,
+					stationName => $stationName
+				}
+			);
 		}
 	)->get($metaUrl);
 

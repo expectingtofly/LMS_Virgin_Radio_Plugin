@@ -64,7 +64,7 @@ sub toplevel {
 					image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO,
 					icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO,
 					url         => 'virgin://_LIVE_vir',
-					itemActions => getItemActions('Virgin Radio Anthems','virgin://_LIVE_vir'),
+					itemActions => getItemActions('Virgin Radio UK','virgin://_LIVE_vir', 'vir'),
 					on_select   => 'play'
 				},
 				{
@@ -74,7 +74,7 @@ sub toplevel {
 					image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOANTHEMS,
 					icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOANTHEMS,
 					url         => 'virgin://_LIVE_anthems',
-					itemActions => getItemActions('Virgin Radio Anthems','virgin://_LIVE_anthems'),
+					itemActions => getItemActions('Virgin Radio Anthems','virgin://_LIVE_anthems', 'anthems'),
 					on_select   => 'play'
 				},
 				{
@@ -84,7 +84,7 @@ sub toplevel {
 					image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOCHILLED,
 					icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOCHILLED,
 					url         => 'virgin://_LIVE_chilled',
-					itemActions => getItemActions('Virgin Radio Chilled','virgin://_LIVE_chilled'),
+					itemActions => getItemActions('Virgin Radio Chilled','virgin://_LIVE_chilled', 'chilled'),
 					on_select   => 'play'
 				},
 				{
@@ -94,7 +94,7 @@ sub toplevel {
 					image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOGROOVE,
 					icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOGROOVE,
 					url         => 'virgin://_LIVE_groove',
-					itemActions => getItemActions('Virgin Radio Groove','virgin://_LIVE_groove'),
+					itemActions => getItemActions('Virgin Radio Groove','virgin://_LIVE_groove', 'groove'),
 					on_select   => 'play'
 				}
 			]
@@ -117,6 +117,7 @@ sub toplevel {
 sub getItemActions {
 	my $name = shift;
 	my $url = shift;
+	my $key = shift;
 	if ($isWOTR) {
 		return '';
 	} else {
@@ -125,7 +126,7 @@ sub getItemActions {
 				command     => ['wotr', 'addStation'],
 				fixedParams => {
 					name => $name,
-					stationKey => '',
+					stationKey => $key,
 					url => $url,
 					handlerFunctionKey => 'virginradio'
 				}
