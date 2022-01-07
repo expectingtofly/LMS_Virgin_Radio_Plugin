@@ -29,6 +29,7 @@ use Slim::Utils::Prefs;
 
 use Plugins::VirginRadio::VirginRadioFeeder;
 use Plugins::VirginRadio::ProtocolHandler;
+use Plugins::VirginRadio::RadioFavourites;
 
 my $log = Slim::Utils::Log->addLogCategory(
 	{
@@ -39,7 +40,6 @@ my $log = Slim::Utils::Log->addLogCategory(
 );
 
 my $prefs = preferences('plugin.virginradio');
-
 
 
 sub initPlugin {
@@ -65,6 +65,24 @@ sub initPlugin {
 		Plugins::VirginRadio::Settings->new;
 	}
 
+
+	return;
+}
+
+
+sub postinitPlugin {
+	my $class = shift;
+
+	if (Slim::Utils::PluginManager->isEnabled('Plugins::RadioFavourites::Plugin')) {
+		Plugins::RadioFavourites::Plugin::addHandler(
+			{
+				handlerFunctionKey => 'virginradio',      #The key to the handler				
+				handlerSub =>  \&Plugins::VirginRadio::RadioFavourites::getStationData          #The operation to handle getting the
+			}
+		);
+	}
+
+	Plugins::VirginRadio::VirginRadioFeeder::init();
 	
 	return;
 }

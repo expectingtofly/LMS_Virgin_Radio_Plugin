@@ -41,57 +41,71 @@ my $log = logger('plugin.virginradio');
 my $prefs = preferences('plugin.virginradio');
 
 my $cache = Slim::Utils::Cache->new();
+
+my $isRadioFavourites;
+
 sub flushCache { $cache->cleanup(); }
+
+sub init {
+	 $isRadioFavourites = Slim::Utils::PluginManager->isEnabled('Plugins::RadioFavourites::Plugin');
+}
 
 
 sub toplevel {
 	my ( $client, $callback, $args ) = @_;
 	main::DEBUGLOG && $log->is_debug && $log->debug("++toplevel");
 
+	my $liveMenu = [
+		{
+			name        => 'Virgin Radio UK',
+			type        => 'audio',
+			cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO,
+			image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO,
+			icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO,
+			url         => 'virgin://_LIVE_vir',
+
+			on_select   => 'play'
+		},
+		{
+			name        => 'Virgin Radio Anthems',
+			type        => 'audio',
+			cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOANTHEMS,
+			image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOANTHEMS,
+			icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOANTHEMS,
+			url         => 'virgin://_LIVE_anthems',
+			on_select   => 'play'
+		},
+		{
+			name        => 'Virgin Radio Chilled',
+			type        => 'audio',
+			cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOCHILLED,
+			image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOCHILLED,
+			icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOCHILLED,
+			url         => 'virgin://_LIVE_chilled',
+			on_select   => 'play'
+		},
+		{
+			name        => 'Virgin Radio Groove',
+			type        => 'audio',
+			cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOGROOVE,
+			image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOGROOVE,
+			icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOGROOVE,
+			url         => 'virgin://_LIVE_groove',
+			on_select   => 'play'
+		}
+	];
+	if ($isRadioFavourites) {
+		@$liveMenu[0]->{itemActions} = getItemActions('Virgin Radio UK','virgin://_LIVE_vir', 'vir');
+		@$liveMenu[1]->{itemActions} = getItemActions('Virgin Radio Anthems','virgin://_LIVE_anthems', 'anthems');
+		@$liveMenu[2]->{itemActions} = getItemActions('Virgin Radio Chilled','virgin://_LIVE_chilled', 'chilled');
+		@$liveMenu[3]->{itemActions} = getItemActions('Virgin Radio Groove','virgin://_LIVE_groove', 'groove');
+	}
 
 	my $menu = [
 		{
 			name => 'Live Virgin Radio Stations',
 			image    => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO_LIVE,
-			items => [
-				{
-					name        => 'Virgin Radio UK',
-					type        => 'audio',
-					cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO,
-					image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO,
-					icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO,
-					url         => 'virgin://_LIVE_vir',
-					on_select   => 'play'
-				},
-				{
-					name        => 'Virgin Radio Anthems',
-					type        => 'audio',
-					cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOANTHEMS,
-					image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOANTHEMS,
-					icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOANTHEMS,
-					url         => 'virgin://_LIVE_anthems',
-					on_select   => 'play'
-				},
-				{
-					name        => 'Virgin Radio Chilled',
-					type        => 'audio',
-					cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOCHILLED,
-					image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOCHILLED,
-					icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOCHILLED,
-					url         => 'virgin://_LIVE_chilled',
-					on_select   => 'play'
-				},
-				,
-				{
-					name        => 'Virgin Radio Groove',
-					type        => 'audio',
-					cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOGROOVE,
-					image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOGROOVE,
-					icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOGROOVE,
-					url         => 'virgin://_LIVE_groove',
-					on_select   => 'play'
-				}
-			]
+			items => $liveMenu
 		},
 		{
 			name => 'Schedule & Catchup',
@@ -105,6 +119,25 @@ sub toplevel {
 
 	main::DEBUGLOG && $log->is_debug && $log->debug("--toplevel");
 	return;
+}
+
+
+sub getItemActions {
+	my $name = shift;
+	my $url = shift;
+	my $key = shift;
+
+	return  {
+		info => {
+			command     => ['radiofavourites', 'addStation'],
+			fixedParams => {
+				name => $name,
+				stationKey => $key,
+				url => $url,
+				handlerFunctionKey => 'virginradio'
+			}
+		},
+	};
 }
 
 
