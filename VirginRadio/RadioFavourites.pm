@@ -1,4 +1,4 @@
-package Plugins::VirginRadio::WOTR;
+package Plugins::VirginRadio::RadioFavourites;
 
 # Copyright (C) 2021 Stuart McLean stu@expectingtofly.co.uk
 
@@ -33,7 +33,12 @@ sub getStationData {
 
 	if ($nowOrNext eq 'next') {
 		$log->error('Next not supported');
-		$cbError->($stationUrl);
+		$cbError->(
+			{
+				url       => $stationUrl,
+				stationName => $stationName
+			}
+		);
 		return;
 	}
 
