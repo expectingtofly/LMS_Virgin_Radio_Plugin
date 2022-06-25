@@ -21,8 +21,11 @@ use Slim::Utils::Log;
 use JSON::XS::VersionOneAndTwo;
 use HTTP::Date;
 use Data::Dumper;
+use POSIX qw(strftime);
+use URI::Escape;
 
 use Plugins::VirginRadio::ProtocolHandler;
+use Plugins::VirginRadio::Utilities;
 
 my $log = logger('plugin.virginradio');
 
@@ -52,6 +55,7 @@ sub getStationData {
 
 			#decode the json
 			my $jsonOnAir = decode_json $content;
+			my $stationImage = _getStationImage($stationKey);
 
 			my $result = {
 				title =>  $jsonOnAir->{onAirNow}->{title},
@@ -60,8 +64,11 @@ sub getStationData {
 				startTime => str2time($jsonOnAir->{onAirNow}->{startTime}),
 				endTime   => str2time($jsonOnAir->{onAirNow}->{endTime}),
 				url       => $stationUrl,
-				stationName => $stationName
+				stationName => $stationName,
+				stationImage => $stationImage,
 			};
+
+			main::INFOLOG && $log->is_info && $log->info(Dumper($result));
 
 			$cbSuccess->($result);
 
@@ -79,6 +86,82 @@ sub getStationData {
 	)->get($metaUrl);
 
 	return;
+}
+
+
+sub _getStationImage {
+	my ($stationKey) = @_;
+
+	if ($stationKey eq 'vir') {
+		return Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO;
+	} elsif ($stationKey eq 'anthems') {
+		return Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOANTHEMS;
+	} elsif ($stationKey eq 'chilled') {
+		return Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOCHILLED;
+	} elsif ($stationKey eq 'groove') {
+		return Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOGROOVE;
+	}
+	return;
+
+}
+
+
+sub getStationSchedule {
+	my ( $stationUrl, $stationKey, $stationName, $scheduleDate, $cbSuccess, $cbError) = @_;
+	main::DEBUGLOG && $log->is_debug && $log->debug("++getStationSchedule");
+
+
+	Plugins::VirginRadio::VirginRadioFeeder::getScheduleAsJSON(
+		sub {
+			my $scheduleJSON = shift;
+
+
+			my $scheduleJSONNode = $scheduleJSON->{props}->{pageProps}->{schedules};
+
+			main::DEBUGLOG && $log->is_debug && $log->debug(Dumper($scheduleJSONNode));
+			my $out= [];
+			for my $schedN (@$scheduleJSONNode) {
+				main::DEBUGLOG && $log->is_debug && $log->debug('d comp ' . $schedN->{date} . ' in ' . $scheduleDate);
+				if ($schedN->{date} eq $scheduleDate) {
+					my $items = $schedN->{shows};
+					for my $item (@$items) {
+
+						if (defined $item->{recording}) {
+							push @$out,
+							  {
+								start => $item->{startTime},
+								end => $item->{endTime},
+								title1 => $item->{title},
+								title2 => $item->{description},
+								image => $item->{images}[0]->{url},
+								url  => 'virgin://_AOD_' . $item->{id} . '_' . uri_escape($item->{recording}->{url}),
+							  };
+
+						} else {
+							push @$out,
+							  {
+								start => $item->{startTime},
+								end => $item->{endTime},
+								title1 => $item->{title},
+								title2 => $item->{description},
+								image => $item->{images}[0]->{url},								
+							  };
+						}
+					}
+				}
+			}
+			$cbSuccess->($out);
+		},
+
+		#could not get a session
+		sub {
+			$menu = [ { name => 'Failed! - Could not get schedule' } ];
+			$cbError->("Could not get schedule");
+		}
+
+	);
+
+
 }
 
 

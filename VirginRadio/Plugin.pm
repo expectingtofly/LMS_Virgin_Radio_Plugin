@@ -77,7 +77,8 @@ sub postinitPlugin {
 		Plugins::RadioFavourites::Plugin::addHandler(
 			{
 				handlerFunctionKey => 'virginradio',      #The key to the handler				
-				handlerSub =>  \&Plugins::VirginRadio::RadioFavourites::getStationData          #The operation to handle getting the
+				handlerSub 		=>  \&Plugins::VirginRadio::RadioFavourites::getStationData,          #The operation to handle getting the
+				handlerSchedule =>	\&Plugins::VirginRadio::RadioFavourites::getStationSchedule,
 			}
 		);
 	}
