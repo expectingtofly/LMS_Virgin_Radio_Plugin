@@ -10,6 +10,6 @@ use constant IMG_VIRGINRADIO_LIVE => 'plugins/VirginRadio/html/images/live_MTL_i
 use constant IMG_DEFAULT_IMAGE => 'https://virginradio.co.uk/sites/all/themes/virgin2019/dist/images/schedule-images-desktop/default-thumbnail.jpg';
 use constant IMG_VIRGINRADIOANTHEMS => 'plugins/VirginRadio/html/images/VirginRadioAnthems.png';
 use constant IMG_VIRGINRADIOCHILLED => 'plugins/VirginRadio/html/images/VirginRadioChilled.png';
-use constant IMG_VIRGINRADIOGROOVE => 'plugins/VirginRadio/html/images/VirginRadioGroove.png';
+use constant IMG_VIRGINRADIO80SPLUS => 'plugins/VirginRadio/html/images/VirginRadio80splus.png';
 
 1;

@@ -49,7 +49,7 @@ use constant URL_LIVESTREAM => {
 	'vir' => 'https://radio.virginradio.co.uk/stream',
 	'anthems' => 'https://radio.virginradio.co.uk/stream-anthems',
 	'chilled' => 'https://radio.virginradio.co.uk/stream-chilled',
-	'groove' => 'https://radio.virginradio.co.uk/stream-groove'
+	'80splus' => 'https://radio.virginradio.co.uk/stream-virginradio4'
 };
 use constant URL_ONAIR => 'https://virginradio.co.uk/api/get-station-data';
 
@@ -64,14 +64,14 @@ use constant STATION_NAMES => {
 	'vir' => 'Virgin Radio UK',
 	'anthems' => 'Virgin Radio Anthems',
 	'chilled' => 'Virgin Radio Chilled',
-	'groove' => 'Virgin Radio Groove'
+	'80splus' => 'Virgin Radio 80s PLUS'
 };
 
 use constant STATION_IDENT => {
 	'vir' => 'virginradiouk',
 	'anthems' => 'virginradioanthems',
 	'chilled' => 'virginradiochilled',
-	'groove' => 'virginradiogroove'
+	'80splus' => 'virginradio80splus'
 };
 use constant CHUNK_SIZE => 1800;
 use constant TRACK_OFFSET => 20;

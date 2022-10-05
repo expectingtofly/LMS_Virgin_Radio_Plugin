@@ -85,12 +85,12 @@ sub toplevel {
 			on_select   => 'play'
 		},
 		{
-			name        => 'Virgin Radio Groove',
+			name        => 'Virgin Radio 80s PLUS',
 			type        => 'audio',
-			cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOGROOVE,
-			image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOGROOVE,
-			icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOGROOVE,
-			url         => 'virgin://_LIVE_groove',
+			cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO80SPLUS,
+			image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO80SPLUS,
+			icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO80SPLUS,
+			url         => 'virgin://_LIVE_80splus',
 			on_select   => 'play'
 		}
 	];
@@ -98,7 +98,7 @@ sub toplevel {
 		@$liveMenu[0]->{itemActions} = getItemActions('Virgin Radio UK','virgin://_LIVE_vir', 'vir');
 		@$liveMenu[1]->{itemActions} = getItemActions('Virgin Radio Anthems','virgin://_LIVE_anthems', 'anthems');
 		@$liveMenu[2]->{itemActions} = getItemActions('Virgin Radio Chilled','virgin://_LIVE_chilled', 'chilled');
-		@$liveMenu[3]->{itemActions} = getItemActions('Virgin Radio Groove','virgin://_LIVE_groove', 'groove');
+		@$liveMenu[3]->{itemActions} = getItemActions('Virgin Radio 80s PLUS','virgin://_LIVE_80splus', '80splus');
 	}
 
 	my $menu = [
