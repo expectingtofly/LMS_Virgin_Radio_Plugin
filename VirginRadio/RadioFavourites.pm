@@ -93,13 +93,13 @@ sub _getStationImage {
 	my ($stationKey) = @_;
 
 	if ($stationKey eq 'vir') {
-		return Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO;
+		return '/' . Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO;
 	} elsif ($stationKey eq 'anthems') {
-		return Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOANTHEMS;
+		return '/' . Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOANTHEMS;
 	} elsif ($stationKey eq 'chilled') {
-		return Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOCHILLED;
-	} elsif ($stationKey eq 'groove') {
-		return Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOGROOVE;
+		return '/' . Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOCHILLED;
+	} elsif ($stationKey eq '80splus') {
+		return '/' . Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO80SPLUS;
 	}
 	return;
 
