@@ -30,7 +30,6 @@ use Slim::Utils::Cache;
 use Data::Dumper;
 use POSIX qw(strftime);
 use HTTP::Date;
-use HTML::TreeBuilder::XPath;
 use JSON::XS::VersionOneAndTwo;
 use Digest::MD5 qw(md5_hex);
 
@@ -46,8 +45,9 @@ my $isRadioFavourites;
 
 sub flushCache { $cache->cleanup(); }
 
+
 sub init {
-	 $isRadioFavourites = Slim::Utils::PluginManager->isEnabled('Plugins::RadioFavourites::Plugin');
+	$isRadioFavourites = Slim::Utils::PluginManager->isEnabled('Plugins::RadioFavourites::Plugin');
 }
 
 
@@ -233,7 +233,7 @@ sub getScheduleAsJSON {
 				$log->debug('Schedule retreived');
 				my $sched = _parseScheduleJSON($http);
 
-				_cacheMenu('VIRGIN_RADIO_SCHEDULE', $sched, 3600);
+				_cacheMenu('VIRGIN_RADIO_SCHEDULE', $sched, 600);
 				$cbY->($sched);
 			},
 
@@ -297,23 +297,19 @@ sub _parseScheduleJSON {
 	my $http        = shift;
 	main::DEBUGLOG && $log->is_debug && $log->debug("++_parseScheduleJSON");
 
-	my $tree= HTML::TreeBuilder::XPath->new;
-	$tree->parse_content( $http->contentRef );
+	if ( ${$http->contentRef} =~ /(?<=<script id="__NEXT_DATA__" type="application\/json">)(.*)(?=<\/script>)/g ) {
 
-	my $scheduleNode = $tree->findnodes('/html/body//script[@id="__NEXT_DATA__"]')->[0];
+		my $schedule = decode_json $1;
 
-	my $chNodes = $scheduleNode->getChildNodes();
+		main::DEBUGLOG && $log->is_debug && $log->debug("--_parseScheduleJSON");
+		return $schedule;
+	} else {
 
-	my $strSchedule = @$chNodes[0]->getValue();
+		main::DEBUGLOG && $log->is_debug && $log->debug("--_parseScheduleJSON No json");
+		return;
+	}
 
-	main::DEBUGLOG && $log->is_debug && $log->debug("Schedule : $strSchedule");
-
-	my $schedule= decode_json $strSchedule;
-
-	$tree->delete;
-
-	main::DEBUGLOG && $log->is_debug && $log->debug("--_parseScheduleJSON");
-	return $schedule;
+	return;
 }
 
 
