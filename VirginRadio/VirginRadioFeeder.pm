@@ -152,7 +152,7 @@ sub getDayMenu {
 	my $menu      = [];
 
 
-	for ( my $i = 0 ; $i < 5 ; $i++ ) {
+	for ( my $i = 0 ; $i < 8 ; $i++ ) {
 		my $d = '';
 		my $epoch = $now - ( 86400 * $i );
 		if ( $i == 0 ) {
