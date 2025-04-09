@@ -47,31 +47,27 @@ use constant URL_CDN => 'https://cdn2.talksport.com/tscdn/virginradio/audio/list
 use constant URL_IMAGES => 'https://cdn2.talksport.com/tscdn/virginradio/schedulepage-images/';
 use constant URL_LIVESTREAM => {
 	'vir' => 'https://radio.virginradio.co.uk/stream',
-	'anthems' => 'https://radio.virginradio.co.uk/stream-anthems',
 	'chilled' => 'https://radio.virginradio.co.uk/stream-chilled',
-	'80splus' => 'https://radio.virginradio.co.uk/stream-virginradio4'
+	'legends' => 'https://radio.virginradio.co.uk/stream-legends',
+	'80splus' => 'https://radio.virginradio.co.uk/stream-virginradio4',
+	'britpop' => 'https://radio.virginradio.co.uk/stream-britpop',
 };
 use constant URL_ONAIR => 'https://virginradio.co.uk/api/get-station-data';
 
-use constant URL_RECENTLYPLAYED => {
-	'vir' => 'https://virginradio.co.uk/sites/virginradio.co.uk/files/nocache/now_lastsongs_json.json',
-	'anthems' => 'https://virginradio.co.uk/sites/virginradio.co.uk/files/nocache/now_lastsongs_json_anthems_json.json',
-	'chilled' => 'https://virginradio.co.uk/sites/virginradio.co.uk/files/nocache/now_lastsongs_json_chilled_json.json',
-	'groove' => 'https://virginradio.co.uk/sites/virginradio.co.uk/files/nocache/now_lastsongs_json_groove_json.json'
-};
-
 use constant STATION_NAMES => {
-	'vir' => 'Virgin Radio UK',
-	'anthems' => 'Virgin Radio Anthems',
+	'vir' => 'Virgin Radio UK',	
 	'chilled' => 'Virgin Radio Chilled',
-	'80splus' => 'Virgin Radio 80s PLUS'
+	'80splus' => 'Virgin Radio 80s PLUS',
+	'britpop' => 'Virgin Radio Britpop',
+	'legends' => 'Virgin Radio Legends',
 };
 
 use constant STATION_IDENT => {
-	'vir' => 'virginradiouk',
-	'anthems' => 'virginradioanthems',
+	'vir' => 'virginradiouk',	
 	'chilled' => 'virginradiochilled',
-	'80splus' => 'virginradio80splus'
+	'80splus' => 'virginradio4',
+	'britpop' => 'virginradiobritpop',
+	'legends' => 'virginradiolegends',
 };
 use constant CHUNK_SIZE => 1800;
 use constant TRACK_OFFSET => 20;
@@ -222,12 +218,19 @@ sub getNextTrack {
 
 		my $streamUrl = Plugins::VirginRadio::ProtocolHandler::URL_LIVESTREAM->{_liveStation($masterUrl)};
 
-		main::DEBUGLOG && $log->is_debug && $log->debug("Setting Live Stream $streamUrl " . 128_000);
+		if ($streamUrl) {
 
-		$song->streamUrl($streamUrl);
-		$song->track->bitrate(128_000);
+			main::DEBUGLOG && $log->is_debug && $log->debug("Setting Live Stream $streamUrl " . 128_000);
 
-		$successCb->();
+			$song->streamUrl($streamUrl);
+			$song->track->bitrate(128_000);
+
+			$successCb->();
+		} else {
+			$log->error("No such live stream");
+			$errorCb->();
+		}
+
 	}
 	if (_isAOD($masterUrl)) {
 
