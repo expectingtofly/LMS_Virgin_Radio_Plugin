@@ -65,16 +65,7 @@ sub toplevel {
 			url         => 'virgin://_LIVE_vir',
 
 			on_select   => 'play'
-		},
-		{
-			name        => 'Virgin Radio Anthems',
-			type        => 'audio',
-			cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOANTHEMS,
-			image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOANTHEMS,
-			icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOANTHEMS,
-			url         => 'virgin://_LIVE_anthems',
-			on_select   => 'play'
-		},
+		},		
 		{
 			name        => 'Virgin Radio Chilled',
 			type        => 'audio',
@@ -85,20 +76,39 @@ sub toplevel {
 			on_select   => 'play'
 		},
 		{
-			name        => 'Virgin Radio 80s PLUS',
+			name        => 'Virgin Radio 80s Plus',
 			type        => 'audio',
 			cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO80SPLUS,
 			image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO80SPLUS,
 			icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO80SPLUS,
 			url         => 'virgin://_LIVE_80splus',
 			on_select   => 'play'
+		},
+		{
+			name        => 'Virgin Radio Legends',
+			type        => 'audio',
+			cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOLEGENDS,
+			image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOLEGENDS,
+			icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOLEGENDS,
+			url         => 'virgin://_LIVE_legends',
+			on_select   => 'play'
+		},
+		{
+			name        => 'Virgin Radio Britpop',
+			type        => 'audio',
+			cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOBRITPOP,
+			image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOBRITPOP,
+			icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOBRITPOP,
+			url         => 'virgin://_LIVE_britpop',
+			on_select   => 'play'
 		}
 	];
 	if ($isRadioFavourites) {
-		@$liveMenu[0]->{itemActions} = getItemActions('Virgin Radio UK','virgin://_LIVE_vir', 'vir');
-		@$liveMenu[1]->{itemActions} = getItemActions('Virgin Radio Anthems','virgin://_LIVE_anthems', 'anthems');
+		@$liveMenu[0]->{itemActions} = getItemActions('Virgin Radio UK','virgin://_LIVE_vir', 'vir');		
 		@$liveMenu[2]->{itemActions} = getItemActions('Virgin Radio Chilled','virgin://_LIVE_chilled', 'chilled');
 		@$liveMenu[3]->{itemActions} = getItemActions('Virgin Radio 80s PLUS','virgin://_LIVE_80splus', '80splus');
+		@$liveMenu[3]->{itemActions} = getItemActions('Virgin Radio Legends','virgin://_LIVE_legends', 'legends');
+		@$liveMenu[3]->{itemActions} = getItemActions('Virgin Radio Britpop','virgin://_LIVE_britpop', 'britpop');
 	}
 
 	my $menu = [
@@ -220,32 +230,56 @@ sub getSchedulePage {
 sub getScheduleAsJSON {
 	my ( $cbY, $cbN ) = @_;
 	main::DEBUGLOG && $log->is_debug && $log->debug("++getScheduleAsJSON");
-
 	if (my $cachedSched = _getCachedMenu('VIRGIN_RADIO_SCHEDULE')) {
+		main::DEBUGLOG && $log->is_debug && $log->debug("++cachedSchedule");
 		$cbY->($cachedSched);
-	} else {
+	} else {	
 
-		my $callUrl =  Plugins::VirginRadio::Utilities::URL_VIRGINSCHEDULE;
+		getAccessToken(sub {
+			my $token = shift;			
 
-		Slim::Networking::SimpleAsyncHTTP->new(
-			sub {
-				my $http = shift;
-				$log->debug('Schedule retreived');
-				my $sched = _parseScheduleJSON($http);
+			my $session = Slim::Networking::Async::HTTP->new;
 
-				_cacheMenu('VIRGIN_RADIO_SCHEDULE', $sched, 600);
-				$cbY->($sched);
-			},
+			my $tod = time();
+			my $week =  $tod - ( 86400 * 7 );
 
-			# Called when no response was received or an error occurred.
-			sub {
-				$log->warn("error: $_[1]");
-				$cbN->();
-			}
-		)->get($callUrl);
+			my $request =HTTP::Request->new( POST => 'https://api.news.co.uk/audio/v1/graph' );
+			$request->header( 'Content-Type' => 'application/json' );
+			$request->header( 'Authorization'    => "Bearer $token" );
+
+			my $body = '{'. '"operationName":"GetRadioSchedule",'. '"variables":{"from":"'. strftime( '%Y-%m-%d', localtime($week) ) . '","to":"'. strftime( '%Y-%m-%d', localtime($tod) ) . '"},"query":"query GetRadioSchedule($from: Date, $to: Date) {\n  schedule(stationId: virginradiouk, from: $from, to: $to) {\n    id\n    date\n    shows {\n      id\n      title\n      description\n      startTime\n      endTime\n      recording {\n        url\n        __typename\n      }\n      images {\n        url\n        width\n        metadata\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}\n"}';
+
+			$request->content($body);
+
+			$session->send_request(
+				{
+					request => $request,
+					onBody  => sub {
+						my ( $http, $self ) = @_;
+						my $res = $http->response;
+						main::DEBUGLOG && $log->is_debug && $log->debug("Have Schedule ");
+						my $sched = _parseScheduleJSON($res->content);
+
+						_cacheMenu('VIRGIN_RADIO_SCHEDULE', $sched, 600);
+						$cbY->($sched);
+					},
+					onError => sub {
+						my ( $http, $self ) = @_;
+						my $res = $http->response;
+						$log->error( 'Error status - ' . $res->status_line );
+						$cbN->();
+					}
+				}
+			);
+
+		},
+		sub {
+			$log->error( "Could not get API token" );
+			$cbN->();
+		});
 	}
 
-	main::DEBUGLOG && $log->is_debug && $log->debug("--getScheduleAsJSON");
+	main::DEBUGLOG && $log->is_debug && $log->debug("--getSchedule");
 	return;
 }
 
@@ -275,7 +309,7 @@ sub _findRecordingFromID {
 	my ($id, $scheduleJSON) = @_;
 	main::DEBUGLOG && $log->is_debug && $log->debug("++_findRecordingFromID");
 
-	my $scheduleJSONNode = $scheduleJSON->{props}->{pageProps}->{schedules};
+	my $scheduleJSONNode = $scheduleJSON->{data}->{schedule};
 
 	for my $schedN (@$scheduleJSONNode) {
 		my $items = $schedN->{shows};
@@ -294,22 +328,16 @@ sub _findRecordingFromID {
 
 
 sub _parseScheduleJSON {
-	my $http        = shift;
-	main::DEBUGLOG && $log->is_debug && $log->debug("++_parseScheduleJSON");
+	my $sched        = shift;
+	main::DEBUGLOG && $log->is_debug && $log->debug("++_parseScheduleJSON : " .  $sched );
 
-	if ( ${$http->contentRef} =~ /(?<=<script id="__NEXT_DATA__" type="application\/json">)(.*)(?=<\/script>)/g ) {
 
-		my $schedule = decode_json $1;
 
-		main::DEBUGLOG && $log->is_debug && $log->debug("--_parseScheduleJSON");
-		return $schedule;
-	} else {
+	my $schedule = decode_json $sched;
 
-		main::DEBUGLOG && $log->is_debug && $log->debug("--_parseScheduleJSON No json");
-		return;
-	}
+	main::DEBUGLOG && $log->is_debug && $log->debug("--_parseScheduleJSON");
 
-	return;
+	return $schedule;
 }
 
 
@@ -320,7 +348,7 @@ sub _parseSchedule {
 	main::DEBUGLOG && $log->is_debug && $log->debug("++_parseSchedule");
 
 
-	my $scheduleJSONNode = $scheduleJSON->{props}->{pageProps}->{schedules};
+	my $scheduleJSONNode = $scheduleJSON->{data}->{schedule};
 
 	for my $schedN (@$scheduleJSONNode) {
 		if ($schedN->{date} eq $scheduleDate) {
@@ -381,6 +409,31 @@ sub _cacheMenu {
 	main::DEBUGLOG && $log->is_debug && $log->debug("--_cacheMenu");
 	return;
 }
+
+sub getAccessToken {
+	my $cbY = shift;
+	my $cbN = shift;
+
+	if (my $token = _getCachedMenu('https://www.thetimes.com/radio/token')) {
+		$cbY->($token);
+	} else {	
+		Slim::Networking::SimpleAsyncHTTP->new(
+			sub {
+				my $http = shift;
+				my $JSON = decode_json ${ $http->contentRef };
+				my $token = $JSON->{'access_token'};
+				_cacheMenu('https://www.thetimes.com/radio/token', $token, 86400);
+				$cbY->($token);
+			},
+			sub {
+				# Called when no response was received or an error occurred.
+				$log->warn("error: $_[1]");
+				$cbN->();
+			}
+		)->get("https://www.thetimes.com/radio/token");
+	}
+}
+
 
 
 1;
