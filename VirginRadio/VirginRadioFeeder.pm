@@ -55,79 +55,58 @@ sub toplevel {
 	my ( $client, $callback, $args ) = @_;
 	main::DEBUGLOG && $log->is_debug && $log->debug("++toplevel");
 
-	my $liveMenu = [
-		{
-			name        => 'Virgin Radio UK',
-			type        => 'audio',
-			cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO,
-			image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO,
-			icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO,
-			url         => 'virgin://_LIVE_vir',
+	getLiveMenu(sub {
+		my $liveMenu = shift;
 
-			on_select   => 'play'
-		},		
-		{
-			name        => 'Virgin Radio Chilled',
-			type        => 'audio',
-			cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOCHILLED,
-			image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOCHILLED,
-			icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOCHILLED,
-			url         => 'virgin://_LIVE_chilled',
-			on_select   => 'play'
-		},
-		{
-			name        => 'Virgin Radio 80s Plus',
-			type        => 'audio',
-			cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO80SPLUS,
-			image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO80SPLUS,
-			icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO80SPLUS,
-			url         => 'virgin://_LIVE_80splus',
-			on_select   => 'play'
-		},
-		{
-			name        => 'Virgin Radio Legends',
-			type        => 'audio',
-			cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOLEGENDS,
-			image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOLEGENDS,
-			icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOLEGENDS,
-			url         => 'virgin://_LIVE_legends',
-			on_select   => 'play'
-		},
-		{
-			name        => 'Virgin Radio Britpop',
-			type        => 'audio',
-			cover       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOBRITPOP,
-			image       => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOBRITPOP,
-			icon        => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIOBRITPOP,
-			url         => 'virgin://_LIVE_britpop',
-			on_select   => 'play'
-		}
-	];
-	if ($isRadioFavourites) {
-		@$liveMenu[0]->{itemActions} = getItemActions('Virgin Radio UK','virgin://_LIVE_vir', 'vir');		
-		@$liveMenu[2]->{itemActions} = getItemActions('Virgin Radio Chilled','virgin://_LIVE_chilled', 'chilled');
-		@$liveMenu[3]->{itemActions} = getItemActions('Virgin Radio 80s PLUS','virgin://_LIVE_80splus', '80splus');
-		@$liveMenu[3]->{itemActions} = getItemActions('Virgin Radio Legends','virgin://_LIVE_legends', 'legends');
-		@$liveMenu[3]->{itemActions} = getItemActions('Virgin Radio Britpop','virgin://_LIVE_britpop', 'britpop');
-	}
+		my $menu = [
+			{
+				name => 'Live Virgin Radio Stations',
+				image    => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO_LIVE,
+				items => $liveMenu
+			},
+			{
+				name => 'Schedule & Catchup',
+				image => Plugins::VirginRadio::Utilities::IMG_SCHEDULE,
+				type => 'link',
+				url  => \&getStationMenu
+			}
+		];
 
-	my $menu = [
-		{
-			name => 'Live Virgin Radio Stations',
-			image    => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO_LIVE,
-			items => $liveMenu
-		},
-		{
-			name => 'Schedule & Catchup',
-			image => Plugins::VirginRadio::Utilities::IMG_SCHEDULE,
-			type => 'link',
-			url  => \&getDayMenu
-		}
-	];
-
-	$callback->( { items => $menu } );
+		$callback->( { items => $menu } );
+	});
 
 	main::DEBUGLOG && $log->is_debug && $log->debug("--toplevel");
+	return;
+}
+
+sub getLiveMenu {
+	my $cbY = shift;
+	
+	getServicesAsJSON(sub {
+		my $JSON = shift;
+		$log->warn(Dumper($JSON));
+		my $transformed = [
+				map {
+				{
+					name => $_->{name},
+					type => 'audio',
+					cover => $_->{logo}{url},
+					image => $_->{logo}{url},
+					icon => $_->{logo}{url},
+					url => 'newsuk://_LIVE_' .$_->{id},
+					on_select   => 'play',
+				} 
+			} @$JSON
+		];
+
+		$log->warn('Transformed : ' .  Dumper($transformed));
+		$cbY->($transformed);
+
+	},
+	sub {
+		$log->error("Failed to get services");
+	});
+
 	return;
 }
 
@@ -150,14 +129,51 @@ sub getItemActions {
 	};
 }
 
+sub getStationMenu {
+	my ( $client, $callback, $args, $passDict ) = @_;
+	main::DEBUGLOG && $log->is_debug && $log->debug("++getDayMenu");
+
+	getServicesAsJSON(sub {
+		my $JSON = shift;
+		$log->warn(Dumper($JSON));
+		my $transformed = [
+				map {
+				{
+					name => $_->{name},
+					type => 'link',
+					cover => $_->{logo}{url},
+					image => $_->{logo}{url},
+					icon => $_->{logo}{url},
+					url => \&getDayMenu,					
+					passthrough => [
+						{
+							station => $_->{id}
+						}
+					]
+					
+				} 
+			} @$JSON
+		];
+
+		$log->warn('Transformed : ' .  Dumper($transformed));
+		$callback->( { items => $transformed } );		
+
+	},
+	sub {
+		$log->error("Failed to get services");
+	});
+
+	return;
+}
 
 sub getDayMenu {
 	my ( $client, $callback, $args, $passDict ) = @_;
 	main::DEBUGLOG && $log->is_debug && $log->debug("++getDayMenu");
 
 	my $now       = time();
-	my $stationid = $passDict->{'stationid'};
-	my $NetworkDetails = $passDict->{'networkDetails'};
+	my $stationid = $passDict->{'station'};	
+
+	main::DEBUGLOG && $log->is_debug && $log->debug("Getting schedule for $stationid ");
 
 	my $menu      = [];
 
@@ -182,7 +198,8 @@ sub getDayMenu {
 			url         => \&getSchedulePage,
 			passthrough => [
 				{
-					scheduledate => $scheduledate
+					scheduledate => $scheduledate,
+					station => $stationid,
 				}
 			],
 		  };
@@ -199,8 +216,11 @@ sub getSchedulePage {
 
 	main::DEBUGLOG && $log->is_debug && $log->debug("++getSchedulePage");
 
+	my $stationid = $passDict->{'station'};
+	main::DEBUGLOG && $log->is_debug && $log->debug(" schedule page for $stationid " . $passDict->{'scheduledate'} );
 
-	if ( my $cachemenu = _getCachedMenu('VIRGINRADIO_SCHEDULE_MENU' . $passDict->{'scheduledate'}) ) {
+
+	if ( my $cachemenu = _getCachedMenu('VIRGINRADIO_SCHEDULE_MENU'. $stationid . $passDict->{'scheduledate'}) ) {
 
 		$callback->( { items => $cachemenu } );
 		main::DEBUGLOG && $log->is_debug && $log->debug("--getSchedulePage cached menu");
@@ -210,10 +230,11 @@ sub getSchedulePage {
 	my $menu = [];
 
 	getScheduleAsJSON(
+		$stationid,
 		sub {
 			my $schedJSON = shift;
-			_parseSchedule($schedJSON, $menu, $passDict->{'scheduledate'} );
-			_cacheMenu('VIRGINRADIO_SCHEDULE_MENU' . $passDict->{'scheduledate'}, $menu, 600);
+			_parseSchedule($schedJSON, $menu, $passDict->{'scheduledate'}, $stationid );
+			_cacheMenu('VIRGINRADIO_SCHEDULE_MENU' . $stationid . $passDict->{'scheduledate'}, $menu, 600);
 			$callback->( { items => $menu } );
 		},
 		sub {
@@ -228,67 +249,167 @@ sub getSchedulePage {
 
 
 sub getScheduleAsJSON {
-	my ( $cbY, $cbN ) = @_;
-	main::DEBUGLOG && $log->is_debug && $log->debug("++getScheduleAsJSON");
-	if (my $cachedSched = _getCachedMenu('VIRGIN_RADIO_SCHEDULE')) {
-		main::DEBUGLOG && $log->is_debug && $log->debug("++cachedSchedule");
-		$cbY->($cachedSched);
-	} else {	
+	my ( $stationId, $cbY, $cbN ) = @_;
+	main::DEBUGLOG && $log->is_debug && $log->debug("++getScheduleAsJSON");	
+	getAccessToken(sub {
+		my $token = shift;			
 
-		getAccessToken(sub {
-			my $token = shift;			
+		my $session = Slim::Networking::Async::HTTP->new;
 
-			my $session = Slim::Networking::Async::HTTP->new;
+		my $tod = time();
+		my $week =  $tod - ( 86400 * 7 );
 
-			my $tod = time();
-			my $week =  $tod - ( 86400 * 7 );
+		my $request =HTTP::Request->new( POST => 'https://api.news.co.uk/audio/v1/graph' );
+		$request->header( 'Content-Type' => 'application/json' );
+		$request->header( 'Authorization'    => "Bearer $token" );
 
-			my $request =HTTP::Request->new( POST => 'https://api.news.co.uk/audio/v1/graph' );
-			$request->header( 'Content-Type' => 'application/json' );
-			$request->header( 'Authorization'    => "Bearer $token" );
+		my $body = '{'. '"operationName":"GetRadioSchedule",'. '"variables":{"from":"'. strftime( '%Y-%m-%d', localtime($week) ) . '","to":"'. strftime( '%Y-%m-%d', localtime($tod) ) . '"},"query":"query GetRadioSchedule($from: Date, $to: Date) {\n  schedule(stationId: ' . $stationId . ', from: $from, to: $to) {\n    id\n    date\n    shows {\n      id\n      title\n      description\n      startTime\n      endTime\n      recording {\n        url\n        __typename\n      }\n      images {\n        url\n        width\n        metadata\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}\n"}';
 
-			my $body = '{'. '"operationName":"GetRadioSchedule",'. '"variables":{"from":"'. strftime( '%Y-%m-%d', localtime($week) ) . '","to":"'. strftime( '%Y-%m-%d', localtime($tod) ) . '"},"query":"query GetRadioSchedule($from: Date, $to: Date) {\n  schedule(stationId: virginradiouk, from: $from, to: $to) {\n    id\n    date\n    shows {\n      id\n      title\n      description\n      startTime\n      endTime\n      recording {\n        url\n        __typename\n      }\n      images {\n        url\n        width\n        metadata\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}\n"}';
+		$request->content($body);
 
-			$request->content($body);
-
-			$session->send_request(
-				{
-					request => $request,
-					onBody  => sub {
-						my ( $http, $self ) = @_;
-						my $res = $http->response;
-						main::DEBUGLOG && $log->is_debug && $log->debug("Have Schedule ");
-						my $sched = _parseScheduleJSON($res->content);
-
-						_cacheMenu('VIRGIN_RADIO_SCHEDULE', $sched, 600);
-						$cbY->($sched);
-					},
-					onError => sub {
-						my ( $http, $self ) = @_;
-						my $res = $http->response;
-						$log->error( 'Error status - ' . $res->status_line );
-						$cbN->();
-					}
+		$session->send_request(
+			{
+				request => $request,
+				onBody  => sub {
+					my ( $http, $self ) = @_;
+					my $res = $http->response;
+					main::DEBUGLOG && $log->is_debug && $log->debug("Have Schedule ");
+					my $sched = _parseScheduleJSON($res->content);
+					
+					$cbY->($sched);
+				},
+				onError => sub {
+					my ( $http, $self ) = @_;
+					my $res = $http->response;
+					$log->error( 'Error status - ' . $res->status_line );
+					$cbN->();
 				}
-			);
+			}
+		);
 
-		},
-		sub {
-			$log->error( "Could not get API token" );
-			$cbN->();
-		});
-	}
+	},
+	sub {
+		$log->error( "Could not get API token" );
+		$cbN->();
+	});
+	
+
 
 	main::DEBUGLOG && $log->is_debug && $log->debug("--getSchedule");
 	return;
 }
 
 
+sub getServicesAsJSON {
+	my ( $cbY, $cbN ) = @_;
+	main::DEBUGLOG && $log->is_debug && $log->debug("++getServicesAsJSON");
+	my $url = "https://virginradio.co.uk/play/api/stations";
+
+	if ( my $cachedServices = _getCachedMenu($url) ) {
+		main::DEBUGLOG && $log->is_debug && $log->debug("got cached services");
+		$cbY->($cachedServices);
+	
+	} else {
+		Slim::Networking::SimpleAsyncHTTP->new(
+				sub {
+					my $http = shift;
+					my $JSON = decode_json ${ $http->contentRef };
+					_cacheMenu($url, $JSON, 600);					
+					$cbY->($JSON);
+				},
+				sub {
+					# Called when no response was received or an error occurred.
+					$log->warn("error: $_[1]");
+					$cbN->();
+				}
+		)->get($url);
+	}
+
+
+	main::DEBUGLOG && $log->is_debug && $log->debug("--getServicesAsJSON");
+	return;
+}
+
+sub getOnAir {
+	my $stationID = shift;
+	my $cbY = shift;
+	my $cbN = shift;	
+	main::DEBUGLOG && $log->is_debug && $log->debug("++getOnAir");
+
+	getAccessToken(sub {
+		my $token = shift;
+
+		my $session = Slim::Networking::Async::HTTP->new;
+
+		my $request =HTTP::Request->new( POST => 'https://api.news.co.uk/audio/v1/graph' );
+		$request->header( 'Content-Type' => 'application/json' );
+		$request->header( 'Authorization'    => "Bearer $token" );		
+
+		my $body = '{"operationName":"GetRadioOnAirNow","variables":{},"query":"query GetRadioOnAirNow {\n  onAirNow(stationId: ' . $stationID . ') {\n    id\n    title\n    description\n    startTime\n    endTime\n    images {\n      url\n      width\n      metadata\n      __typename\n    }\n    __typename\n  }\n}\n"}';
+
+		
+		$request->content($body);
+
+		$session->send_request(
+			{
+				request => $request,
+				onBody  => sub {
+					my ( $http, $self ) = @_;
+					my $res = $http->response->content;
+					my $json = decode_json $res;
+					main::DEBUGLOG && $log->is_debug && $log->debug(Dumper($json));
+					$cbY->($json);
+				},
+				onError => sub {
+					my ( $http, $self ) = @_;
+					my $res = $http->response;
+					$log->error( 'Error status - ' . $res->status_line );
+					$cbN->();
+				},
+			}
+		);
+	},
+	sub {
+		log->error( 'Could not get access token' );
+		$cbN->();
+		}
+	);
+
+	main::DEBUGLOG && $log->is_debug && $log->debug("--getOnAir");
+	return;
+}
+
+
+
+sub getLiveStream {
+	my ( $stationID, $cbY, $cbN ) = @_;
+	main::DEBUGLOG && $log->is_debug && $log->debug("++getLiveStream $stationID");
+
+	getServicesAsJSON(sub {
+		my $json = shift;
+		for my $statNode (@$json) {
+			if ($statNode->{id} eq $stationID) {
+				$cbY->($statNode->{streams}{standard});
+				return;
+			}
+		}
+		$log->error("Stream $stationID not found");
+		$cbN->();
+	},
+	sub {
+		$log->error("Stream $stationID not retrieved");
+		$cbN->();
+	});
+	return;
+	main::DEBUGLOG && $log->is_debug && $log->debug("--getLiveStream");
+}
+
 sub getAODFromID {
-	my ($id, $cbY, $cbN) = @_;
+	my ($stationId, $id, $cbY, $cbN) = @_;
 	main::DEBUGLOG && $log->is_debug && $log->debug("++getAODFromID");
 
 	getScheduleAsJSON(
+		$stationId,
 		sub {
 			my $JSON = shift;
 			if (my $itemJSON = _findRecordingFromID($id, $JSON)) {
@@ -345,6 +466,7 @@ sub _parseSchedule {
 	my $scheduleJSON = shift;
 	my $menu        = shift;
 	my $scheduleDate = shift;
+	my $stationId = shift;
 	main::DEBUGLOG && $log->is_debug && $log->debug("++_parseSchedule");
 
 
@@ -357,20 +479,25 @@ sub _parseSchedule {
 
 				my $sttim = str2time( $item->{'startTime'} );
 				my $sttime = strftime( '%H:%M ', localtime($sttim) );
+				my $image;
+				if (scalar @{$item->{'images'}}) {
+					my @thumbnails = grep { $_->{'width'} == 720 && $_->{'metadata'}[0] eq 'thumbnail' } @{$item->{'images'}};
+					$image = $thumbnails[0]->{'url'};
+				}
 
 				if (defined $item->{recording}) {
 					push @$menu,
 					  {
 						name => $sttime . ' ' . $item->{title} . ' - ' . $item->{description},
-						image => $item->{images}[0]->{url},
-						url => 'virgin://_AOD_' . $item->{id} . '_' . uri_escape($item->{recording}->{url}),
+						image => $image,
+						url => 'newsuk://_AOD_'. $stationId . '_'. $item->{id} . '_' . uri_escape($item->{recording}->{url}),
 						type => 'audio',
 						on_select   => 'play'
 					  };
 				} else {
 					push @$menu,{
 						name => $sttime . ' ' . $item->{title} . ' - ' . $item->{description},
-						image => $item->{images}[0]->{url}
+						image => $image,
 
 					};
 				}
