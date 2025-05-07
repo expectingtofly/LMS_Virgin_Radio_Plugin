@@ -60,12 +60,12 @@ sub toplevel {
 
 		my $menu = [
 			{
-				name => 'Live Virgin Radio Stations',
+				name => 'Live Stations',
 				image    => Plugins::VirginRadio::Utilities::IMG_VIRGINRADIO_LIVE,
 				items => $liveMenu
 			},
 			{
-				name => 'Schedule & Catchup',
+				name => 'Station Schedules & Catchup',
 				image => Plugins::VirginRadio::Utilities::IMG_SCHEDULE,
 				type => 'link',
 				url  => \&getStationMenu
@@ -81,10 +81,10 @@ sub toplevel {
 
 sub getLiveMenu {
 	my $cbY = shift;
+	main::DEBUGLOG && $log->is_debug && $log->debug("++getLiveMenu");
 	
 	getServicesAsJSON(sub {
 		my $JSON = shift;
-		$log->warn(Dumper($JSON));
 		my $transformed = [
 				map {
 				{
@@ -95,11 +95,12 @@ sub getLiveMenu {
 					icon => $_->{logo}{url},
 					url => 'newsuk://_LIVE_' .$_->{id},
 					on_select   => 'play',
+					itemAction => getItemActions($_->{name}, 'newsuk://_LIVE_' .$_->{id}, $_->{id}),
 				} 
 			} @$JSON
 		];
+		
 
-		$log->warn('Transformed : ' .  Dumper($transformed));
 		$cbY->($transformed);
 
 	},
@@ -107,6 +108,7 @@ sub getLiveMenu {
 		$log->error("Failed to get services");
 	});
 
+	main::DEBUGLOG && $log->is_debug && $log->debug("--getLiveMenu");
 	return;
 }
 
@@ -116,17 +118,21 @@ sub getItemActions {
 	my $url = shift;
 	my $key = shift;
 
-	return  {
-		info => {
-			command     => ['radiofavourites', 'addStation'],
-			fixedParams => {
-				name => $name,
-				stationKey => $key,
-				url => $url,
-				handlerFunctionKey => 'virginradio'
-			}
-		},
-	};
+	if ($isRadioFavourites) {
+		return  {
+			info => {
+				command     => ['radiofavourites', 'addStation'],
+				fixedParams => {
+					name => $name,
+					stationKey => $key,
+					url => $url,
+					handlerFunctionKey => 'virginradio'
+				}
+			},
+		};
+	} else {
+		return;
+	}
 }
 
 sub getStationMenu {
@@ -135,7 +141,7 @@ sub getStationMenu {
 
 	getServicesAsJSON(sub {
 		my $JSON = shift;
-		$log->warn(Dumper($JSON));
+		
 		my $transformed = [
 				map {
 				{
@@ -154,8 +160,7 @@ sub getStationMenu {
 				} 
 			} @$JSON
 		];
-
-		$log->warn('Transformed : ' .  Dumper($transformed));
+		
 		$callback->( { items => $transformed } );		
 
 	},
