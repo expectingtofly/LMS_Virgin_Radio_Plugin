@@ -394,7 +394,7 @@ sub getLiveStream {
 		my $json = shift;
 		for my $statNode (@$json) {
 			if ($statNode->{id} eq $stationID) {
-				$cbY->($statNode->{streams}{standard});
+				$cbY->($statNode);
 				return;
 			}
 		}

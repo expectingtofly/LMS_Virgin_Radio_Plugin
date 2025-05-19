@@ -82,10 +82,15 @@ sub new {
 	${*$self}{'client'} = $args->{'client'};
 	my $isLive = _isLive($masterUrl);
 	my $liveStation = '';
-	$liveStation = _liveStation($masterUrl) if $isLive;
+	my $liveStationName = '';
+	if ($isLive) {
+		$liveStation = _liveStation($masterUrl);
+		$liveStationName = $song->pluginData('liveStationName');
+	}
 	${*$self}{'vars'} = {
 		'isLive' => $isLive,
 		'liveStation' => $liveStation,
+		'liveStationName' => $liveStationName,
 		'trackCycle' => 1,
 	};
 
@@ -191,7 +196,7 @@ sub getNextTrack {
 	
 	if (_isLive($masterUrl)) {
 		Plugins::VirginRadio::VirginRadioFeeder::getLiveStream(_liveStation($masterUrl), sub {
-		my $streamUrl = shift;
+		my $streamUrl = shift->{streams}->{standard};
 		if ($streamUrl) {
 
 			main::DEBUGLOG && $log->is_debug && $log->debug("Setting Live Stream $streamUrl " . 128_000);
@@ -235,6 +240,11 @@ sub _getStreamDetails {
 
 			my $dur = str2time( $JSON->{'endTime'} ) - str2time( $JSON->{'startTime'} );
 
+			my $image;
+			if (scalar @{$JSON->{'images'}}) {
+				my @thumbnails = grep { $_->{'width'} == 720 && $_->{'metadata'}[0] eq 'thumbnail' } @{$JSON->{'images'}};
+				$image = $thumbnails[0]->{'url'};
+			}
 
 			my $AOD_Details = {
 				title => $JSON->{title},
@@ -428,6 +438,7 @@ sub liveMetaData {
 
 		my $title =  $jsonOnAir->{'data'}->{onAirNow}->{title};
 		my $description = $jsonOnAir->{'data'}->{onAirNow}->{description};
+		my $duration = str2time( $jsonOnAir->{'data'}->{'onAirNow'}->{'endTime'} ) - str2time( $jsonOnAir->{'data'}->{'onAirNow'}->{'startTime'} );
 		my $image;
 		if (scalar @{$jsonOnAir->{'data'}->{'onAirNow'}->{'images'}}) {
 			my @thumbnails = grep { $_->{'width'} == 720 && $_->{'metadata'}[0] eq 'thumbnail' } @{$jsonOnAir->{'data'}->{'onAirNow'}->{'images'}};
@@ -441,9 +452,11 @@ sub liveMetaData {
 				realTitle => $title,
 				artist => $description,
 				realArtist => $description,
-				album => $v->{'liveStation'},				
-				cover => $image,				
-				icon => $image,				
+				album => $v->{'liveStationName'},
+				cover => $image,
+				icon => $image,
+				duration => $duration,
+				secs => $duration, 
 				type        => 'MP3 (Virgin Radio)',
 			};
 
@@ -459,10 +472,30 @@ sub liveMetaData {
 
 			my $client = ${*$self}{'client'};
 			my $song = $client->playingSong();
+			
+			my $offset =  time() - str2time( $jsonOnAir->{'data'}->{'onAirNow'}->{'startTime'} );
+
+			main::INFOLOG && $log->is_info && $log->info("Offset is $offset from " . time());
+					
+			my $position_in_seconds = $client->songElapsedSeconds();
+					
+
+			#fix progress bar 
+			$client->playingSong()->can('startOffset')
+			? $client->playingSong()->startOffset( $offset - $position_in_seconds )
+			: ( $client->playingSong()->{startOffset} = ($offset - $position_in_seconds) );
+			
+			$client->master()->remoteStreamStartTime( Time::HiRes::time() - $offset );
+					
+			$client->playingSong()->duration( $duration ); 
+			$song->track->secs( $duration ); 
+			
+			Slim::Music::Info::setCurrentTitle( Slim::Player::Playlist::url($client), $title, $client ); 
+
+			Slim::Control::Request::notifyFromArray( $client, ['newmetadata'] );
+			
 			$song->pluginData( meta  => $meta );
 			Slim::Control::Request::notifyFromArray( $client,['newmetadata'] );
-
-
 			Slim::Utils::Timers::setTimer($self, $checkagain, \&liveMetaData);
 
 		},
@@ -490,9 +523,20 @@ sub scanUrl {
 
 	if (_isLive($url)) {
 		Plugins::VirginRadio::VirginRadioFeeder::getLiveStream(_liveStation($url), sub{
-			$urlToScan = shift;
+			my $node = shift;
+			
+			$urlToScan = $node->{streams}->{standard};
+			my $stationName = $node->{name};
+
 			$args->{cb} = sub {
-				my $track = shift;				
+				my $track = shift;
+
+				my $client = $args->{client};
+				my $song = $client->playingSong();
+
+				if ( $song && $song->currentTrack()->url eq $url ) {					
+					$song->pluginData( liveStationName => $stationName );					
+				}
 
 				$realcb->($args->{song}->currentTrack());
 			};
