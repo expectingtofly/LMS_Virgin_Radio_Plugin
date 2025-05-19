@@ -29,6 +29,7 @@ use Slim::Utils::Prefs;
 
 use Plugins::VirginRadio::VirginRadioFeeder;
 use Plugins::VirginRadio::ProtocolHandler;
+use Plugins::VirginRadio::CompatabilityHandler;
 use Plugins::VirginRadio::RadioFavourites;
 
 my $log = Slim::Utils::Log->addLogCategory(
