@@ -430,11 +430,10 @@ sub liveMetaData {
 
 	my $v = $self->vars;
 
-	$log->debug('In readMetaData ');
 	Plugins::VirginRadio::VirginRadioFeeder::getOnAir($v->{'liveStation'},
 	sub {
 		my $jsonOnAir = shift;
-		$log->info('Getting MetaData');
+		main::DEBUGLOG && $log->is_debug && $log->debug('Getting Meta Data');
 
 		my $title =  $jsonOnAir->{'data'}->{onAirNow}->{title};
 		my $description = $jsonOnAir->{'data'}->{onAirNow}->{description};

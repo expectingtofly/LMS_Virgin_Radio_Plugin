@@ -22,7 +22,7 @@ use JSON::XS::VersionOneAndTwo;
 use HTTP::Date;
 use Data::Dumper;
 
-use Plugins::VirginRadio::VirginRadioFeeder
+use Plugins::VirginRadio::VirginRadioFeeder;
 
 my $log = logger('plugin.virginradio');
 
