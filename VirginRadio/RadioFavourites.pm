@@ -22,7 +22,7 @@ use JSON::XS::VersionOneAndTwo;
 use HTTP::Date;
 use Data::Dumper;
 
-use Plugins::VirginRadio::ProtocolHandler;
+use Plugins::VirginRadio::VirginRadioFeeder
 
 my $log = logger('plugin.virginradio');
 
@@ -42,23 +42,16 @@ sub getStationData {
 		return;
 	}
 
-	my $metaUrl = Plugins::VirginRadio::ProtocolHandler::URL_ONAIR . '?station=' . $stationKey . '&hasPrograms=1';
-
-	main::INFOLOG && $log->is_info && $log->info("Meta URL is : $metaUrl");
-	Slim::Networking::SimpleAsyncHTTP->new(
+	Plugins::VirginRadio::VirginRadioFeeder::getOnAir($stationKey,
 		sub {
-			my $http = shift;
-			my $content = ${$http->contentRef};
-
-			#decode the json
-			my $jsonOnAir = decode_json $content;
+			my $jsonOnAir = shift;		
 
 			my $result = {
-				title =>  $jsonOnAir->{onAirNow}->{title},
+				title =>  $jsonOnAir->{data}->{onAirNow}->{title},
 				description => '',
-				image => $jsonOnAir->{onAirNow}->{images}[0]->{url},
-				startTime => str2time($jsonOnAir->{onAirNow}->{startTime}),
-				endTime   => str2time($jsonOnAir->{onAirNow}->{endTime}),
+				image => $jsonOnAir->{data}->{onAirNow}->{images}[0]->{url},
+				startTime => str2time($jsonOnAir->{data}->{onAirNow}->{startTime}),
+				endTime   => str2time($jsonOnAir->{data}->{onAirNow}->{endTime}),
 				url       => $stationUrl,
 				stationName => $stationName
 			};
@@ -76,7 +69,7 @@ sub getStationData {
 				}
 			);
 		}
-	)->get($metaUrl);
+	);
 
 	return;
 }

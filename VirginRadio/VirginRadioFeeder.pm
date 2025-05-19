@@ -95,7 +95,7 @@ sub getLiveMenu {
 					icon => $_->{logo}{url},
 					url => 'newsuk://_LIVE_' .$_->{id},
 					on_select   => 'play',
-					itemAction => getItemActions($_->{name}, 'newsuk://_LIVE_' .$_->{id}, $_->{id}),
+					itemActions => getItemActions($_->{name}, 'newsuk://_LIVE_' .$_->{id}, $_->{id}),
 				} 
 			} @$JSON
 		];
