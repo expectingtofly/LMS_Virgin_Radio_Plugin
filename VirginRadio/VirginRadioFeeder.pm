@@ -319,6 +319,7 @@ sub getServicesAsJSON {
 				sub {
 					my $http = shift;
 					my $JSON = decode_json ${ $http->contentRef };
+					main::DEBUGLOG && $log->is_debug && $log->debug('Received station JSON');					
 					_cacheMenu($url, $JSON, 600);					
 					$cbY->($JSON);
 				},
@@ -361,8 +362,7 @@ sub getOnAir {
 				onBody  => sub {
 					my ( $http, $self ) = @_;
 					my $res = $http->response->content;
-					my $json = decode_json $res;
-					main::DEBUGLOG && $log->is_debug && $log->debug(Dumper($json));
+					my $json = decode_json $res;					
 					$cbY->($json);
 				},
 				onError => sub {

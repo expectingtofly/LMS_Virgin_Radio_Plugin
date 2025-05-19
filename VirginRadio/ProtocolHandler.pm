@@ -492,8 +492,14 @@ sub scanUrl {
 		Plugins::VirginRadio::VirginRadioFeeder::getLiveStream(_liveStation($url), sub{
 			$urlToScan = shift;
 			$args->{cb} = sub {
+				my $track = shift;				
+
 				$realcb->($args->{song}->currentTrack());
 			};
+
+			#let LMS sort out the real stream
+			Slim::Utils::Scanner::Remote->scanURL($urlToScan, $args);
+
 		},
 		sub {
 			$log->error("Failed to scan URL");
@@ -517,11 +523,11 @@ sub scanUrl {
 
 			$realcb->($args->{song}->currentTrack());
 		};
+
+		#let LMS sort out the real stream
+		Slim::Utils::Scanner::Remote->scanURL($urlToScan, $args);
+
 	}
-
-	#let LMS sort out the real stream
-	Slim::Utils::Scanner::Remote->scanURL($urlToScan, $args);
-
 
 	main::DEBUGLOG && $log->is_debug && $log->debug("scanurl $url actual stream $urlToScan");
 
