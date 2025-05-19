@@ -42,7 +42,7 @@ sub getStationData {
 		return;
 	}
 
-	my $metaUrl = Plugins::VirginRadio::ProtocolHandler::URL_ONAIR . '?station=' . Plugins::VirginRadio::ProtocolHandler::STATION_IDENT->{$stationKey} . '&hasPrograms=1';
+	my $metaUrl = Plugins::VirginRadio::ProtocolHandler::URL_ONAIR . '?station=' . $stationKey . '&hasPrograms=1';
 
 	main::INFOLOG && $log->is_info && $log->info("Meta URL is : $metaUrl");
 	Slim::Networking::SimpleAsyncHTTP->new(
