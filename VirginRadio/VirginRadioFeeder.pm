@@ -85,6 +85,7 @@ sub getLiveMenu {
 	
 	getServicesAsJSON(sub {
 		my $JSON = shift;
+		
 		my $transformed = [
 				map {
 				{
@@ -131,7 +132,7 @@ sub getItemActions {
 			},
 		};
 	} else {
-		return;
+		return {};
 	}
 }
 
