@@ -184,8 +184,6 @@ sub getMetadataFor {
 }
 
 
-sub getFormatForURL { 'mp3' }
-
 sub isRemote { 1 }
 
 
@@ -203,6 +201,11 @@ sub getNextTrack {
 					my $rediredirectedUrl = shift;
 					main::DEBUGLOG && $log->is_debug && $log->debug("Setting Live Stream URL $rediredirectedUrl");
 					$song->streamUrl($rediredirectedUrl);
+
+					my $contentType = $song->pluginData('ScannedFormat');
+					main::DEBUGLOG && $log->is_debug && $log->debug("Setting content type to $contentType");
+					$song->track->content_type($contentType);
+
 					$successCb->();
 				},
 				sub {
@@ -275,6 +278,10 @@ sub _getStreamDetails {
 						main::DEBUGLOG && $log->is_debug && $log->debug("Redirected AOD URL is : $trackurl");
 						$song->streamUrl($trackurl);
 						$song->track->bitrate(128_000);
+						my $contentType = $song->pluginData('ScannedFormat');
+						main::DEBUGLOG && $log->is_debug && $log->debug("Setting content type to $contentType");
+						$song->track->content_type($contentType);
+
 						$http->disconnect;
 						$successCb->();
 					},
@@ -448,7 +455,10 @@ sub liveMetaData {
 			my @thumbnails = grep { $_->{'width'} == 720 && $_->{'metadata'}[0] eq 'thumbnail' } @{$jsonOnAir->{'data'}->{'onAirNow'}->{'images'}};
 			$image = $thumbnails[0]->{'url'};
 		}
+			my $client = ${*$self}{'client'};
+			my $song = $client->playingSong();
 
+			my $streamformat = $song->pluginData('ScannedFormat');
 
 
 			my $meta = {
@@ -461,7 +471,7 @@ sub liveMetaData {
 				icon => $image,
 				duration => $duration,
 				secs => $duration, 
-				type        => 'MP3 (Virgin Radio)',
+				type => "$streamformat (Virgin Radio)",
 			};
 
 			main::DEBUGLOG && $log->is_debug && $log->debug('Dump of Meta Data ' . Dumper($meta));
@@ -474,8 +484,6 @@ sub liveMetaData {
 				$checkagain = time() + 120;
 			}
 
-			my $client = ${*$self}{'client'};
-			my $song = $client->playingSong();
 			
 			my $offset =  time() - str2time( $jsonOnAir->{'data'}->{'onAirNow'}->{'startTime'} );
 
@@ -528,8 +536,10 @@ sub scanUrl {
 	if (_isLive($url)) {
 		Plugins::VirginRadio::VirginRadioFeeder::getLiveStream(_liveStation($url), sub{
 			my $node = shift;
+			my $scanUrl = $node->{streams}->{standard};
+			main::DEBUGLOG && $log->is_debug && $log->debug("Original stream to scan is : $scanUrl");
 
-			_getRedirectedStreamURL($node->{streams}->{standard},
+			_getRedirectedStreamURL($scanUrl,
 				sub {
 					my $urlToScan = shift;
 					my $stationName = $node->{name};
@@ -543,8 +553,12 @@ sub scanUrl {
 						if ( $song && $song->currentTrack()->url eq $url ) {					
 							$song->pluginData( liveStationName => $stationName );		
 							my $bitrate = $track->bitrate();
-							main::DEBUGLOG && $log->is_debug && $log->debug("bitrate is : $bitrate");
+							main::DEBUGLOG && $log->is_debug && $log->debug("bitrate is : $bitrate");							
 							$song->bitrate($bitrate);			
+
+							my $streamformat = $track->content_type();
+							main::DEBUGLOG && $log->is_debug && $log->debug("streamformat is : $streamformat");
+							$song->pluginData( ScannedFormat => $streamformat );						
 						}
 
 						$realcb->($args->{song}->currentTrack());
@@ -576,6 +590,10 @@ sub scanUrl {
 				my $bitrate = $track->bitrate();
 				main::DEBUGLOG && $log->is_debug && $log->debug("bitrate is : $bitrate");
 				$song->bitrate($bitrate);
+
+				my $streamformat = $track->content_type();
+				main::DEBUGLOG && $log->is_debug && $log->debug("streamformat is : $streamformat");
+				$song->pluginData( ScannedFormat => $streamformat );
 			}
 
 			$realcb->($args->{song}->currentTrack());
@@ -585,8 +603,6 @@ sub scanUrl {
 		Slim::Utils::Scanner::Remote->scanURL($urlToScan, $args);
 
 	}
-
-	main::DEBUGLOG && $log->is_debug && $log->debug("scanurl $url actual stream $urlToScan");
 
 }
 
@@ -605,7 +621,6 @@ sub _AODUrlStationsID {
 	my ($url) = @_;
 
 	my @urlsplit = split /_/x, $url;
-
 	my $id = $urlsplit[2];
 
 	return $id;
@@ -657,6 +672,7 @@ sub _isAOD {
 sub _getRedirectedStreamURL {
 	my ( $url, $cbY, $cbN ) = @_;
 
+	main::DEBUGLOG && $log->is_debug && $log->debug("Getting redirection for  : $url");
 	
 	my $http = Slim::Networking::Async::HTTP->new;
 	my $request = HTTP::Request->new( GET => $url );
