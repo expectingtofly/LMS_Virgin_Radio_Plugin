@@ -198,13 +198,18 @@ sub getNextTrack {
 		Plugins::VirginRadio::VirginRadioFeeder::getLiveStream(_liveStation($masterUrl), sub {
 		my $streamUrl = shift->{streams}->{standard};
 		if ($streamUrl) {
-
-			main::DEBUGLOG && $log->is_debug && $log->debug("Setting Live Stream $streamUrl " . 128_000);
-
-			$song->streamUrl($streamUrl);
-			$song->track->bitrate(128_000);
-
-			$successCb->();
+			_getRedirectedStreamURL($streamUrl,
+				sub {
+					my $rediredirectedUrl = shift;
+					main::DEBUGLOG && $log->is_debug && $log->debug("Setting Live Stream URL $rediredirectedUrl");
+					$song->streamUrl($rediredirectedUrl);
+					$successCb->();
+				},
+				sub {
+					$log->error("$streamUrl is invalid");					
+					$errorCb->();
+				}				
+			);
 		} else {
 			$log->error("No such live stream");
 			$errorCb->();
@@ -523,26 +528,35 @@ sub scanUrl {
 	if (_isLive($url)) {
 		Plugins::VirginRadio::VirginRadioFeeder::getLiveStream(_liveStation($url), sub{
 			my $node = shift;
-			
-			$urlToScan = $node->{streams}->{standard};
-			my $stationName = $node->{name};
 
-			$args->{cb} = sub {
-				my $track = shift;
+			_getRedirectedStreamURL($node->{streams}->{standard},
+				sub {
+					my $urlToScan = shift;
+					my $stationName = $node->{name};
 
-				my $client = $args->{client};
-				my $song = $client->playingSong();
+					$args->{cb} = sub {
+						my $track = shift;
 
-				if ( $song && $song->currentTrack()->url eq $url ) {					
-					$song->pluginData( liveStationName => $stationName );					
+						my $client = $args->{client};
+						my $song = $client->playingSong();
+
+						if ( $song && $song->currentTrack()->url eq $url ) {					
+							$song->pluginData( liveStationName => $stationName );		
+							my $bitrate = $track->bitrate();
+							main::DEBUGLOG && $log->is_debug && $log->debug("bitrate is : $bitrate");
+							$song->bitrate($bitrate);			
+						}
+
+						$realcb->($args->{song}->currentTrack());
+					};
+
+					#let LMS sort out the real stream
+					Slim::Utils::Scanner::Remote->scanURL($urlToScan, $args);
+				},
+				sub {
+					$log->error("Failed to get URL to scan");
 				}
-
-				$realcb->($args->{song}->currentTrack());
-			};
-
-			#let LMS sort out the real stream
-			Slim::Utils::Scanner::Remote->scanURL($urlToScan, $args);
-
+			);
 		},
 		sub {
 			$log->error("Failed to scan URL");
@@ -638,6 +652,31 @@ sub _isAOD {
 		return 1;
 	}
 	return;
+}
+
+sub _getRedirectedStreamURL {
+	my ( $url, $cbY, $cbN ) = @_;
+
+	
+	my $http = Slim::Networking::Async::HTTP->new;
+	my $request = HTTP::Request->new( GET => $url );
+	$http->send_request(
+		{
+			request     => $request,
+			onHeaders => sub {
+				my $http = shift;
+				my $trackurl = $http->request->uri->as_string;
+				main::DEBUGLOG && $log->is_debug && $log->debug("Redirected URL is : $trackurl");
+				$cbY->($trackurl);
+			},
+			onError => sub {
+				my ( $http, $self ) = @_;
+				my $res = $http->response;
+				$log->error('Error status - ' . $res->status_line );
+				$cbN->();
+			}
+		}
+	);
 }
 
 1;
