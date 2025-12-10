@@ -194,7 +194,10 @@ sub getNextTrack {
 	
 	if (_isLive($masterUrl)) {
 		Plugins::VirginRadio::VirginRadioFeeder::getLiveStream(_liveStation($masterUrl), sub {
-		my $streamUrl = shift->{streams}->{standard};
+		my $result = shift;
+		my $streamUrl = $result->{streams}->{standard} || $result->{streams}->{progressive};
+		main::DEBUGLOG && $log->is_debug && $log->debug("Live stream URL is $streamUrl");		
+
 		if ($streamUrl) {
 			_getRedirectedStreamURL($streamUrl,
 				sub {
@@ -536,7 +539,7 @@ sub scanUrl {
 	if (_isLive($url)) {
 		Plugins::VirginRadio::VirginRadioFeeder::getLiveStream(_liveStation($url), sub{
 			my $node = shift;
-			my $scanUrl = $node->{streams}->{standard};
+			my $scanUrl = $node->{streams}->{standard} || $node->{streams}->{progressive};
 			main::DEBUGLOG && $log->is_debug && $log->debug("Original stream to scan is : $scanUrl");
 
 			_getRedirectedStreamURL($scanUrl,
