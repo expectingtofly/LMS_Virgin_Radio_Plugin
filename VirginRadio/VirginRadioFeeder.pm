@@ -309,7 +309,7 @@ sub getScheduleAsJSON {
 sub getServicesAsJSON {
 	my ( $cbY, $cbN ) = @_;
 	main::DEBUGLOG && $log->is_debug && $log->debug("++getServicesAsJSON");
-	my $url = "https://virginradio.co.uk/play/api/stations";
+	my $url = "https://talksport.com/play/api/stations";
 
 	if ( my $cachedServices = _getCachedMenu($url) ) {
 		main::DEBUGLOG && $log->is_debug && $log->debug("got cached services");
