@@ -473,7 +473,7 @@ sub liveMetaData {
 
 			main::DEBUGLOG && $log->is_debug && $log->debug('Dump of Meta Data ' . Dumper($meta));
 
-			my $progEndTime = str2time($jsonOnAir->{'data'}->{onAirNow}->{endTime});
+			my $progEndTime = str2time($jsonOnAir->{'endTime'});
 
 			my $checkagain =  $progEndTime + 10;
 
@@ -482,7 +482,7 @@ sub liveMetaData {
 			}
 
 			
-			my $offset =  time() - str2time( $jsonOnAir->{'data'}->{'onAirNow'}->{'startTime'} );
+			my $offset =  time() - str2time( $jsonOnAir->{'startTime'} );
 
 			main::INFOLOG && $log->is_info && $log->info("Offset is $offset from " . time());
 					
