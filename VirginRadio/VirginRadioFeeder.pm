@@ -256,52 +256,25 @@ sub getSchedulePage {
 
 sub getScheduleAsJSON {
 	my ( $stationId, $cbY, $cbN ) = @_;
-	main::DEBUGLOG && $log->is_debug && $log->debug("++getScheduleAsJSON");	
-	getAccessToken(sub {
-		my $token = shift;			
+	main::DEBUGLOG && $log->is_debug && $log->debug("++getScheduleAsJSON");
+	my $url = "https://talksport.com/play/api/schedule/$stationId";
 
-		my $session = Slim::Networking::Async::HTTP->new;
-
-		my $tod = time();
-		my $week =  $tod - ( 86400 * 7 );
-
-		my $request =HTTP::Request->new( POST => 'https://api.news.co.uk/audio/v1/graph' );
-		$request->header( 'Content-Type' => 'application/json' );
-		$request->header( 'Authorization'    => "Bearer $token" );
-
-		my $body = '{'. '"operationName":"GetRadioSchedule",'. '"variables":{"from":"'. strftime( '%Y-%m-%d', localtime($week) ) . '","to":"'. strftime( '%Y-%m-%d', localtime($tod) ) . '"},"query":"query GetRadioSchedule($from: Date, $to: Date) {\n  schedule(stationId: ' . $stationId . ', from: $from, to: $to) {\n    id\n    date\n    shows {\n      id\n      title\n      description\n      startTime\n      endTime\n      recording {\n        url\n        __typename\n      }\n      images {\n        url\n        width\n        metadata\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}\n"}';
-
-		$request->content($body);
-
-		$session->send_request(
-			{
-				request => $request,
-				onBody  => sub {
-					my ( $http, $self ) = @_;
-					my $res = $http->response;
-					main::DEBUGLOG && $log->is_debug && $log->debug("Have Schedule ");
-					my $sched = _parseScheduleJSON($res->content);
-					
-					$cbY->($sched);
-				},
-				onError => sub {
-					my ( $http, $self ) = @_;
-					my $res = $http->response;
-					$log->error( 'Error status - ' . $res->status_line );
-					$cbN->();
-				}
+	Slim::Networking::SimpleAsyncHTTP->new(
+			sub {
+				my $http = shift;
+				my $JSON = decode_json ${ $http->contentRef };
+				main::DEBUGLOG && $log->is_debug && $log->debug('Received schedule JSON');														
+				$cbY->($JSON);
+			},
+			sub {
+				# Called when no response was received or an error occurred.
+				$log->warn("error: $_[1]");
+				$cbN->();
 			}
-		);
-
-	},
-	sub {
-		$log->error( "Could not get API token" );
-		$cbN->();
-	});
-	
+	)->get($url);	
 
 
-	main::DEBUGLOG && $log->is_debug && $log->debug("--getSchedule");
+	main::DEBUGLOG && $log->is_debug && $log->debug("--getScheduleAsJSON");
 	return;
 }
 
@@ -338,53 +311,35 @@ sub getServicesAsJSON {
 }
 
 sub getOnAir {
-	my $stationID = shift;
-	my $cbY = shift;
-	my $cbN = shift;	
+ 	my ( $stationID, $cbY, $cbN ) = @_;
 	main::DEBUGLOG && $log->is_debug && $log->debug("++getOnAir");
+	my $url = "https://talksport.com/play/api/onAirNow/$stationID";
 
-	getAccessToken(sub {
-		my $token = shift;
-
-		my $session = Slim::Networking::Async::HTTP->new;
-
-		my $request =HTTP::Request->new( POST => 'https://api.news.co.uk/audio/v1/graph' );
-		$request->header( 'Content-Type' => 'application/json' );
-		$request->header( 'Authorization'    => "Bearer $token" );		
-
-		my $body = '{"operationName":"GetRadioOnAirNow","variables":{},"query":"query GetRadioOnAirNow {\n  onAirNow(stationId: ' . $stationID . ') {\n    id\n    title\n    description\n    startTime\n    endTime\n    images {\n      url\n      width\n      metadata\n      __typename\n    }\n    __typename\n  }\n}\n"}';
-
-		
-		$request->content($body);
-
-		$session->send_request(
-			{
-				request => $request,
-				onBody  => sub {
-					my ( $http, $self ) = @_;
-					my $res = $http->response->content;
-					my $json = decode_json $res;					
-					$cbY->($json);
+	if ( my $cachedOnAir = _getCachedMenu($url) ) {
+		main::DEBUGLOG && $log->is_debug && $log->debug("got cached services");
+		$cbY->($cachedOnAir);
+	
+	} else {
+		Slim::Networking::SimpleAsyncHTTP->new(
+				sub {
+					my $http = shift;
+					my $JSON = decode_json ${ $http->contentRef };
+					main::DEBUGLOG && $log->is_debug && $log->debug('Received onAir JSON');					
+					_cacheMenu($url, $JSON, 60);					
+					$cbY->($JSON);
 				},
-				onError => sub {
-					my ( $http, $self ) = @_;
-					my $res = $http->response;
-					$log->error( 'Error status - ' . $res->status_line );
+				sub {
+					# Called when no response was received or an error occurred.
+					$log->warn("error: $_[1]");
 					$cbN->();
-				},
-			}
-		);
-	},
-	sub {
-		log->error( 'Could not get access token' );
-		$cbN->();
-		}
-	);
+				}
+		)->get($url);
+	}
+
 
 	main::DEBUGLOG && $log->is_debug && $log->debug("--getOnAir");
 	return;
 }
-
 
 
 sub getLiveStream {
@@ -436,9 +391,7 @@ sub _findRecordingFromID {
 	my ($id, $scheduleJSON) = @_;
 	main::DEBUGLOG && $log->is_debug && $log->debug("++_findRecordingFromID");
 
-	my $scheduleJSONNode = $scheduleJSON->{data}->{schedule};
-
-	for my $schedN (@$scheduleJSONNode) {
+	for my $schedN (@ $scheduleJSON) {
 		my $items = $schedN->{shows};
 		for my $item (@$items) {
 			if ($item->{id} eq $id) {
@@ -454,20 +407,6 @@ sub _findRecordingFromID {
 }
 
 
-sub _parseScheduleJSON {
-	my $sched        = shift;
-	main::DEBUGLOG && $log->is_debug && $log->debug("++_parseScheduleJSON : " .  $sched );
-
-
-
-	my $schedule = decode_json $sched;
-
-	main::DEBUGLOG && $log->is_debug && $log->debug("--_parseScheduleJSON");
-
-	return $schedule;
-}
-
-
 sub _parseSchedule {
 	my $scheduleJSON = shift;
 	my $menu        = shift;
@@ -476,20 +415,14 @@ sub _parseSchedule {
 	main::DEBUGLOG && $log->is_debug && $log->debug("++_parseSchedule");
 
 
-	my $scheduleJSONNode = $scheduleJSON->{data}->{schedule};
-
-	for my $schedN (@$scheduleJSONNode) {
+	for my $schedN (@$scheduleJSON) {
 		if ($schedN->{date} eq $scheduleDate) {
 			my $items = $schedN->{shows};
 			for my $item (@$items) {
 
 				my $sttim = str2time( $item->{'startTime'} );
 				my $sttime = strftime( '%H:%M ', localtime($sttim) );
-				my $image;
-				if (scalar @{$item->{'images'}}) {
-					my @thumbnails = grep { $_->{'width'} == 720 && $_->{'metadata'}[0] eq 'thumbnail' } @{$item->{'images'}};
-					$image = $thumbnails[0]->{'url'};
-				}
+				my $image = $item->{'images'}->{'thumbnail'};				
 
 				if (defined $item->{recording}) {
 					push @$menu,
@@ -541,30 +474,6 @@ sub _cacheMenu {
 
 	main::DEBUGLOG && $log->is_debug && $log->debug("--_cacheMenu");
 	return;
-}
-
-sub getAccessToken {
-	my $cbY = shift;
-	my $cbN = shift;
-
-	if (my $token = _getCachedMenu('https://www.thetimes.com/radio/token')) {
-		$cbY->($token);
-	} else {	
-		Slim::Networking::SimpleAsyncHTTP->new(
-			sub {
-				my $http = shift;
-				my $JSON = decode_json ${ $http->contentRef };
-				my $token = $JSON->{'access_token'};
-				_cacheMenu('https://www.thetimes.com/radio/token', $token, 86400);
-				$cbY->($token);
-			},
-			sub {
-				# Called when no response was received or an error occurred.
-				$log->warn("error: $_[1]");
-				$cbN->();
-			}
-		)->get("https://www.thetimes.com/radio/token");
-	}
 }
 
 

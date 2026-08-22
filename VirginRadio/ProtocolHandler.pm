@@ -251,18 +251,15 @@ sub _getStreamDetails {
 
 			my $dur = str2time( $JSON->{'endTime'} ) - str2time( $JSON->{'startTime'} );
 
-			my $image;
-			if (scalar @{$JSON->{'images'}}) {
-				my @thumbnails = grep { $_->{'width'} == 720 && $_->{'metadata'}[0] eq 'thumbnail' } @{$JSON->{'images'}};
-				$image = $thumbnails[0]->{'url'};
-			}
+			my $image = $JSON->{'images'}->{'thumbnail'};
+			
 
 			my $AOD_Details = {
 				title => $JSON->{title},
 				subtitle => $JSON->{description},
 				durationSecs => $dur,
 				track => $JSON->{recording}->{url},
-				image => $JSON->{images}[0]->{url},
+				image =>$image,
 			};
 			main::DEBUGLOG && $log->is_debug && $log->debug('Dump of AOD details  : ' .  Dumper($AOD_Details));
 
@@ -446,18 +443,15 @@ sub liveMetaData {
 	my $v = $self->vars;
 
 	Plugins::VirginRadio::VirginRadioFeeder::getOnAir($v->{'liveStation'},
-	sub {
-		my $jsonOnAir = shift;
-		main::DEBUGLOG && $log->is_debug && $log->debug('Getting Meta Data');
+		sub {
+			my $jsonOnAir = shift;
+			main::DEBUGLOG && $log->is_debug && $log->debug('Getting Meta Data');
 
-		my $title =  $jsonOnAir->{'data'}->{onAirNow}->{title};
-		my $description = $jsonOnAir->{'data'}->{onAirNow}->{description};
-		my $duration = str2time( $jsonOnAir->{'data'}->{'onAirNow'}->{'endTime'} ) - str2time( $jsonOnAir->{'data'}->{'onAirNow'}->{'startTime'} );
-		my $image;
-		if (scalar @{$jsonOnAir->{'data'}->{'onAirNow'}->{'images'}}) {
-			my @thumbnails = grep { $_->{'width'} == 720 && $_->{'metadata'}[0] eq 'thumbnail' } @{$jsonOnAir->{'data'}->{'onAirNow'}->{'images'}};
-			$image = $thumbnails[0]->{'url'};
-		}
+			my $title =  $jsonOnAir->{title};
+			my $description = $jsonOnAir->{description};
+			my $duration = str2time( $jsonOnAir->{'endTime'} ) - str2time( $jsonOnAir->{'startTime'} );
+			my $image = $jsonOnAir->{'images'}->{'thumbnail'};
+			
 			my $client = ${*$self}{'client'};
 			my $song = $client->playingSong();
 
