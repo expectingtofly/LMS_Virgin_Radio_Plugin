@@ -257,7 +257,7 @@ sub getSchedulePage {
 sub getScheduleAsJSON {
 	my ( $stationId, $cbY, $cbN ) = @_;
 	main::DEBUGLOG && $log->is_debug && $log->debug("++getScheduleAsJSON");
-	my $url = "https://talksport.com/play/api/schedule/$stationId";
+	my $url = "https://talk.tv/play/api/schedule/$stationId";
 
 	Slim::Networking::SimpleAsyncHTTP->new(
 			sub {
@@ -282,7 +282,7 @@ sub getScheduleAsJSON {
 sub getServicesAsJSON {
 	my ( $cbY, $cbN ) = @_;
 	main::DEBUGLOG && $log->is_debug && $log->debug("++getServicesAsJSON");
-	my $url = "https://talksport.com/play/api/stations";
+	my $url = "https://talk.tv/play/api/stations";
 
 	if ( my $cachedServices = _getCachedMenu($url) ) {
 		main::DEBUGLOG && $log->is_debug && $log->debug("got cached services");
@@ -313,7 +313,7 @@ sub getServicesAsJSON {
 sub getOnAir {
  	my ( $stationID, $cbY, $cbN ) = @_;
 	main::DEBUGLOG && $log->is_debug && $log->debug("++getOnAir");
-	my $url = "https://talksport.com/play/api/onAirNow/$stationID";
+	my $url = "https://talk.tv/play/api/onAirNow/$stationID";
 
 	if ( my $cachedOnAir = _getCachedMenu($url) ) {
 		main::DEBUGLOG && $log->is_debug && $log->debug("got cached services");
